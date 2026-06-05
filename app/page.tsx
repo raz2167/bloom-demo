@@ -413,13 +413,28 @@ export default function Home() {
     setState("loading");
     setStep(0);
 
-    // המרה ל-base64
-    const base64Full = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    // כיווץ תמונה לפני שליחה
+const base64Full = await new Promise<string>((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    const MAX = 800;
+    let { width, height } = img;
+    if (width > height && width > MAX) {
+      height = Math.round((height * MAX) / width);
+      width = MAX;
+    } else if (height > MAX) {
+      width = Math.round((width * MAX) / height);
+      height = MAX;
+    }
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+    resolve(canvas.toDataURL("image/jpeg", 0.75));
+  };
+  img.onerror = reject;
+  img.src = URL.createObjectURL(file);
+});
 
     // אנימציית שלבים
     const interval = setInterval(() => {
