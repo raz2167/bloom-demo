@@ -121,9 +121,16 @@ export async function POST(req: NextRequest) {
       const prompt = buildPrompt(analysis);
       L(`🟢 [5] פרומפט: ${prompt.substring(0, 80)}...`);
 
-      const dalleRes = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: {
+      const controller = new AbortController();
+const timeoutId = setTimeout(() => {
+  controller.abort();
+  L("🔴 [5] DALL-E timeout אחרי 25 שניות — ממשיך בלי תמונה");
+}, 25000);
+
+const dalleRes = await fetch("https://api.openai.com/v1/images/generations", {
+  method: "POST",
+  signal: controller.signal,
+  headers: {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
