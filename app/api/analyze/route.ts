@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { filterProducts } from "@/lib/catalog";
-
+export const maxDuration = 60;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
@@ -83,8 +83,8 @@ export async function POST(req: NextRequest) {
             model: "dall-e-3",
             prompt: dallePrompt,
             n: 1,
-            size: "1792x1024",
-            quality: "hd",
+            size: "1024x1024",
+quality: "standard",
             style: "natural",
           }),
         }
