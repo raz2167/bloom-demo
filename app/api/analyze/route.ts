@@ -1,21 +1,42 @@
 // app/api/analyze/route.ts
-// Backend: קולט תמונה → Claude Vision → DALL-E → מחזיר תוצאות
-
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { filterProducts } from "@/lib/catalog";
+
 export const maxDuration = 60;
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
+  // ── לוג מלא של כל שלב ─────────────────────────────
+  const log: string[] = [];
+  const L = (msg: string) => {
+    console.log(msg);
+    log.push(msg);
+  };
+
   try {
-    const { imageBase64, mimeType = "image/jpeg" } = await req.json();
+    L("🟢 [START] קיבלתי בקשה");
+
+    // ── שלב 1: קריאת הנתונים ─────────────────────────
+    const body = await req.json();
+    const { imageBase64, mimeType = "image/jpeg" } = body;
 
     if (!imageBase64) {
-      return NextResponse.json({ error: "לא התקבלה תמונה" }, { status: 400 });
+      L("🔴 [1] שגיאה: לא התקבלה תמונה");
+      return NextResponse.json({ error: "לא התקבלה תמונה", debug: { log } }, { status: 400 });
     }
 
-    // ── שלב 1: Claude Vision מנתח את המרפסת ───────────────
+    L(`🟢 [1] תמונה התקבלה | mimeType: ${mimeType} | גודל: ${Math.round(imageBase64.length / 1024)}KB`);
+
+    // ── שלב 2: Claude Vision ──────────────────────────
+    L("🟡 [2] שולח ל-Claude Vision...");
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      L("🔴 [2] שגיאה: אין ANTHROPIC_API_KEY");
+      return NextResponse.json({ error: "אין ANTHROPIC_API_KEY", debug: { log } }, { status: 500 });
+    }
+
     const analysisMsg = await anthropic.messages.create({
       model: "claude-opus-4-5",
       max_tokens: 512,
@@ -33,123 +54,148 @@ export async function POST(req: NextRequest) {
             },
             {
               type: "text",
-              text: `אתה מעצב גינות מרפסת מקצועי. נתח את התמונה והחזר JSON בלבד, ללא טקסט נוסף:
+              text: `אתה מעצב גינות מרפסת. נתח את התמונה והחזר JSON בלבד, ללא טקסט נוסף:
 {
   "balcony_size": "קטנה|בינונית|גדולה",
   "sun_exposure": "שמש מלאה|חצי צל|צל",
   "style": "ים-תיכוני|מודרני|כפרי|מינימליסטי|בוהו",
   "railing": "ברזל|בטון|זכוכית|עץ|אין",
-  "floor_color": "תיאור קצר של צבע הריצפה",
-  "notes": "הערה קצרה אחת על מה שייחודי במרפסת"
-}
-
-הנחיות:
-- balcony_size: קטנה = עד 6מ"ר, בינונית = 6-15מ"ר, גדולה = מעל 15מ"ר
-- sun_exposure: בדוק כיוון המרפסת ואת צל הבניין
-- style: נחש לפי הריהוט, המעקה וסגנון הבנייה`
+  "floor_color": "תיאור קצר",
+  "notes": "הערה קצרה אחת"
+}`,
             },
           ],
         },
       ],
     });
 
-    // נקה את תשובת Claude (לפעמים מגיע עם ```json)
+    L("🟢 [2] Claude ענה");
+
     const rawText =
       analysisMsg.content[0].type === "text"
         ? analysisMsg.content[0].text.trim()
         : "{}";
+
+    L(`🟢 [2] תשובה גולמית: ${rawText.substring(0, 150)}`);
+
     const jsonStr = rawText.replace(/```json|```/g, "").trim();
-    const analysis = JSON.parse(jsonStr);
 
-    // ── שלב 2: סינון מוצרים מהקטלוג ──────────────────────
-    const recommendations = filterProducts(analysis);
+    let analysis: Record<string, string>;
+    try {
+      analysis = JSON.parse(jsonStr);
+      L(`🟢 [2] JSON פורסר בהצלחה: ${JSON.stringify(analysis)}`);
+    } catch {
+      L(`🔴 [2] כשל בפרסור JSON: ${jsonStr}`);
+      return NextResponse.json({ error: "Claude לא החזיר JSON תקין", debug: { log } }, { status: 500 });
+    }
 
-    // ── שלב 3: בניית פרומפט ל-DALL-E ─────────────────────
-    const dallePrompt = buildDallePrompt(analysis);
+    // ── שלב 3: סינון מוצרים ──────────────────────────
+    L("🟡 [3] מסנן מוצרים מהקטלוג...");
 
-    // ── שלב 4: יצירת תמונה עם DALL-E 3 ───────────────────
+    const recommendations = filterProducts(analysis as Parameters<typeof filterProducts>[0]);
+
+    L(`🟢 [3] נמצאו ${recommendations.length} מוצרים`);
+
+    // ── שלב 4: DALL-E / gpt-image-2 ──────────────────
+    L("🟡 [4] מתחיל שלב DALL-E...");
+
     let imageUrl: string | null = null;
 
-if (process.env.OPENAI_API_KEY) {
-      const dalleRes = await fetch(
-        "https://api.openai.com/v1/images/generations",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-  model: "gpt-image-2",
-  prompt: dallePrompt,
-  n: 1,
-  size: "1024x1024",
-  quality: "medium",
-            response_format: "url",
-}),
-            
-          }),
-        }
-      );
+    if (!process.env.OPENAI_API_KEY) {
+      L("🔴 [4] אין OPENAI_API_KEY — מדלג על DALL-E");
+    } else {
+      L("🟢 [4] יש OPENAI_API_KEY — בונה פרומפט...");
 
-      if (dalleRes.ok) {
-  const dalleData = await dalleRes.json();
-  console.log("DALL-E response keys:", Object.keys(dalleData.data?.[0] || {}));
-  
-  if (dalleData.data?.[0]?.url) {
-    imageUrl = dalleData.data[0].url;
-  } else if (dalleData.data?.[0]?.b64_json) {
-    imageUrl = `data:image/png;base64,${dalleData.data[0].b64_json}`;
-  }
-}
-console.log("imageUrl result:", imageUrl);
+      const prompt = buildPrompt(analysis);
+      L(`🟢 [4] פרומפט: ${prompt.substring(0, 100)}...`);
+      L("🟡 [4] שולח בקשה ל-OpenAI...");
+
+      const dalleRes = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-image-2",
+          prompt,
+          n: 1,
+          size: "1024x1024",
+          quality: "medium",
+        }),
+      });
+
+      L(`🟢 [4] OpenAI status: ${dalleRes.status}`);
+
+      const dalleData = await dalleRes.json();
+      L(`🟢 [4] OpenAI response keys: ${Object.keys(dalleData).join(", ")}`);
+
+      if (dalleData.error) {
+        L(`🔴 [4] OpenAI שגיאה: ${JSON.stringify(dalleData.error)}`);
+      } else if (dalleData.data?.[0]) {
+        const item = dalleData.data[0];
+        L(`🟢 [4] data[0] keys: ${Object.keys(item).join(", ")}`);
+
+        if (item.url) {
+          imageUrl = item.url;
+          L(`🟢 [4] קיבלתי URL: ${imageUrl!.substring(0, 60)}...`);
+        } else if (item.b64_json) {
+          imageUrl = `data:image/png;base64,${item.b64_json}`;
+          L(`🟢 [4] קיבלתי base64, אורך: ${item.b64_json.length} תווים`);
+        } else {
+          L(`🔴 [4] לא מצאתי url או b64_json ב-data[0]`);
+        }
       } else {
-        console.error("DALL-E error:", await dalleRes.text());
+        L(`🔴 [4] אין data[0] בתשובה: ${JSON.stringify(dalleData).substring(0, 200)}`);
       }
     }
 
-    return NextResponse.json({ analysis, recommendations, imageUrl });
+    // ── סיום ────────────────────────────────────────
+    L(`✅ [DONE] imageUrl: ${imageUrl ? "יש" : "אין"}`);
+
+    return NextResponse.json({
+      analysis,
+      recommendations,
+      imageUrl,
+      debug: { log },
+    });
+
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "שגיאה לא ידועה";
-    console.error("API Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : "שגיאה לא ידועה";
+    L(`🔴 [CATCH] ${msg}`);
+    console.error("Full error:", err);
+    return NextResponse.json({ error: msg, debug: { log } }, { status: 500 });
   }
 }
 
-// ── בניית פרומפט ────────────────────────────────────────
-function buildDallePrompt(analysis: {
-  style?: string;
-  sun_exposure?: string;
-  balcony_size?: string;
-  railing?: string;
-}): string {
-  const styleMap: Record<string, string> = {
-    "ים-תיכוני": "Mediterranean style, terracotta pots, lavender and rosemary, blue and white ceramics",
-    "מודרני": "modern minimalist style, sleek concrete planters, structured greenery",
-    "כפרי": "rustic country style, wooden planters, wildflowers and herbs",
-    "מינימליסטי": "clean minimalist, simple white ceramic pots, single-variety plants",
-    "בוהו": "boho natural style, hanging plants, macrame, mixed textures",
+// ── בניית פרומפט ────────────────────────────────────
+function buildPrompt(analysis: Record<string, string>): string {
+  const styles: Record<string, string> = {
+    "ים-תיכוני": "Mediterranean style with terracotta pots, lavender and rosemary",
+    "מודרני":    "modern minimalist with clean concrete planters and structured greenery",
+    "כפרי":      "rustic country style with wooden planters and wildflowers",
+    "מינימליסטי": "clean minimalist with simple white ceramic pots",
+    "בוהו":      "boho natural with hanging plants and mixed textures",
   };
-  const sunMap: Record<string, string> = {
-    "שמש מלאה": "bathed in bright warm Mediterranean sunlight",
-    "חצי צל": "with warm dappled light and pleasant partial shade",
-    "צל": "in cool pleasant shade with lush shade-loving ferns and pothos",
+  const suns: Record<string, string> = {
+    "שמש מלאה": "bathed in bright Mediterranean sunlight",
+    "חצי צל":   "with warm dappled light and partial shade",
+    "צל":       "in cool pleasant shade with lush shade-loving plants",
   };
-  const sizeMap: Record<string, string> = {
-    "קטנה": "small cozy intimate",
+  const sizes: Record<string, string> = {
+    "קטנה":   "small cozy intimate",
     "בינונית": "medium comfortable",
-    "גדולה": "large spacious",
+    "גדולה":   "large spacious",
   };
 
-  const style = styleMap[analysis.style ?? ""] ?? styleMap["ים-תיכוני"];
-  const sun = sunMap[analysis.sun_exposure ?? ""] ?? sunMap["חצי צל"];
-  const size = sizeMap[analysis.balcony_size ?? ""] ?? sizeMap["בינונית"];
-  const railing = analysis.railing ?? "iron";
+  const style = styles[analysis.style]   ?? styles["ים-תיכוני"];
+  const sun   = suns[analysis.sun_exposure] ?? suns["חצי צל"];
+  const size  = sizes[analysis.balcony_size] ?? sizes["בינונית"];
 
   return (
-    `A stunning ${size} balcony garden ${sun}, ${style}, ` +
-    `lush with colorful blooming flowers, vibrant green plants, ` +
-    `${railing} railing visible, realistic professional photography, ` +
-    `golden hour lighting, Israeli urban architecture, high quality, photorealistic`
+    `A beautiful ${size} balcony garden ${sun}, ${style}, ` +
+    `lush flowering plants, vibrant greenery, ` +
+    `${analysis.railing ?? "iron"} railing, realistic photography, ` +
+    `golden hour lighting, Israeli urban architecture, photorealistic`
   );
 }
