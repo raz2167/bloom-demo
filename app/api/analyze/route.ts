@@ -92,7 +92,9 @@ quality: "standard",
 
       if (dalleRes.ok) {
         const dalleData = await dalleRes.json();
-        imageUrl = dalleData.data?.[0]?.url ?? null;
+console.log("DALL-E full response:", JSON.stringify(dalleData));
+imageUrl = dalleData.data?.[0]?.url ?? null;
+console.log("imageUrl result:", imageUrl);
       } else {
         console.error("DALL-E error:", await dalleRes.text());
       }
