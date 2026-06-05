@@ -37,7 +37,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "אין ANTHROPIC_API_KEY", debug: { log } }, { status: 500 });
     }
 
-    const analysisMsg = await anthropic.messages.create({
+    let analysisMsg;
+for (let attempt = 1; attempt <= 3; attempt++) {
+  try {
+    L(`🟡 [2] ניסיון ${attempt}/3...`);
+    analysisMsg = await anthropic.messages.create({
+      model: "claude-opus-4-5",
+      max_tokens: 512,
+      messages: [/* אותו תוכן */]
+    });
+    L(`🟢 [2] הצליח בניסיון ${attempt}`);
+    break;
+  } catch (e: any) {
+    L(`🔴 [2] ניסיון ${attempt} נכשל: ${e.message?.substring(0,80)}`);
+    if (attempt === 3) throw new Error("השירות עמוס כרגע — נסה שוב בעוד 30 שניות 🌿");
+    await new Promise(r => setTimeout(r, 2000 * attempt));
+  }
+}
       model: "claude-opus-4-5",
       max_tokens: 512,
       messages: [
