@@ -85,6 +85,7 @@ if (process.env.OPENAI_API_KEY) {
   n: 1,
   size: "1024x1024",
   quality: "medium",
+            response_format: "url",
 }),
             
           }),
@@ -92,9 +93,15 @@ if (process.env.OPENAI_API_KEY) {
       );
 
       if (dalleRes.ok) {
-        const dalleData = await dalleRes.json();
-console.log("DALL-E full response:", JSON.stringify(dalleData));
-imageUrl = dalleData.data?.[0]?.url ?? null;
+  const dalleData = await dalleRes.json();
+  console.log("DALL-E response keys:", Object.keys(dalleData.data?.[0] || {}));
+  
+  if (dalleData.data?.[0]?.url) {
+    imageUrl = dalleData.data[0].url;
+  } else if (dalleData.data?.[0]?.b64_json) {
+    imageUrl = `data:image/png;base64,${dalleData.data[0].b64_json}`;
+  }
+}
 console.log("imageUrl result:", imageUrl);
       } else {
         console.error("DALL-E error:", await dalleRes.text());
