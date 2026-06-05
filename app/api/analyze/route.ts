@@ -161,11 +161,22 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "שגיאה לא ידועה";
-    L(`🔴 [CATCH] ${msg}`);
-    console.error("Full error:", err);
-    return NextResponse.json({ error: msg, debug: { log } }, { status: 500 });
+  const raw = err instanceof Error ? err.message : "שגיאה לא ידועה";
+  L(`🔴 [CATCH] ${raw}`);
+  console.error("Full error:", err);
+
+  // הודעות ידידותיות למשתמש
+  let friendly = "משהו השתבש, נסה שוב בעוד רגע";
+  if (raw.includes("529") || raw.includes("Overloaded")) {
+    friendly = "השירות עמוס כרגע — נסה שוב בעוד 30 שניות 🌿";
+  } else if (raw.includes("401") || raw.includes("auth")) {
+    friendly = "בעיית חיבור לשירות — צור קשר עם התמיכה";
+  } else if (raw.includes("timeout") || raw.includes("TIMEOUT")) {
+    friendly = "הבקשה לקחה יותר מדי זמן — נסה תמונה קטנה יותר";
   }
+
+  return NextResponse.json({ error: friendly, debug: { log } }, { status: 500 });
+}
 }
 
 // ── בניית פרומפט ────────────────────────────────────
