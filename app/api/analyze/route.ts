@@ -80,11 +80,10 @@ if (process.env.OPENAI_API_KEY) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "dall-e-3",
-            prompt: dallePrompt,
-            n: 1,
-            size: "1024x1024",
-quality: "standard",
+            model: "dall-e-2",
+prompt: dallePrompt,
+n: 1,
+size: "512x512",
             
           }),
         }
