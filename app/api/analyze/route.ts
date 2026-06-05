@@ -68,9 +68,9 @@ export async function POST(req: NextRequest) {
     const dallePrompt = buildDallePrompt(analysis);
 
     // ── שלב 4: יצירת תמונה עם DALL-E 3 ───────────────────
-    let imageUrl: string | null = "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&h=500&fit=crop";
+    let imageUrl: string | null = null;
 
-if (false) {
+if (process.env.OPENAI_API_KEY) {
       const dalleRes = await fetch(
         "https://api.openai.com/v1/images/generations",
         {
