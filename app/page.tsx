@@ -1,5 +1,5 @@
 "use client";
-// app/page.tsx
+// app/page.tsx — SSE: שלבי הטעינה מתעדכנים רק כשהשרת באמת סיים אותם
 
 import { useState, useRef } from "react";
 import BalconySVG from "@/components/BalconySVG";
@@ -23,26 +23,61 @@ interface ApiResult {
   debug?: { log: string[] };
 }
 
+// תוויות השלבים — חייבות להתאים לסדר ב-route.ts
 const STEPS = [
-  "מנתח את התמונה...",
-  "מזהה תנאים ועיצוב...",
-  "מעצב את הגינה...",
-  "בוחר צמחים מתאימים...",
+  { label: "מנתח את התמונה...",       time: "~5 שנ׳"  },
+  { label: "מזהה תנאים ועיצוב...",    time: "~5 שנ׳"  },
+  { label: "בוחר צמחים מתאימים...",   time: "~3 שנ׳"  },
+  { label: "מעצב הדמיה...",           time: "~20 שנ׳" },
 ];
+
+// ── כיווץ תמונה ──────────────────────────────────────
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX = 800;
+      let { width, height } = img;
+      if (width > height && width > MAX) {
+        height = Math.round((height * MAX) / width);
+        width = MAX;
+      } else if (height > MAX) {
+        width = Math.round((width * MAX) / height);
+        height = MAX;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.75));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 // ── Loading ───────────────────────────────────────────
 function LoadingScreen({ step }: { step: number }) {
   return (
-    <div dir="rtl" style={{
-      display: "flex", flexDirection: "column", alignItems: "center",
-      justifyContent: "center", minHeight: "100vh",
-      background: "#1a3a18", padding: "40px 24px", fontFamily: "sans-serif",
-    }}>
-      {/* Animated rings */}
-      <div style={{ position: "relative", width: "100px", height: "100px", marginBottom: "32px" }}>
-        {[0,1,2].map((i) => (
+    <div
+      dir="rtl"
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", minHeight: "100vh",
+        background: "#1a3a18", padding: "40px 24px", fontFamily: "sans-serif",
+      }}
+    >
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.7;transform:scale(.92)} }
+      `}</style>
+
+      {/* טבעות סיבוב */}
+      <div style={{ position: "relative", width: "100px", height: "100px", marginBottom: "36px" }}>
+        {[0, 1, 2].map((i) => (
           <div key={i} style={{
-            position: "absolute", inset: `${i * 12}px`,
+            position: "absolute",
+            inset: `${i * 12}px`,
             borderRadius: "50%",
             border: "2px solid transparent",
             borderTopColor: `rgba(123,196,122,${0.9 - i * 0.25})`,
@@ -51,40 +86,62 @@ function LoadingScreen({ step }: { step: number }) {
         ))}
         <div style={{
           position: "absolute", inset: 0, display: "flex",
-          alignItems: "center", justifyContent: "center", fontSize: "28px",
+          alignItems: "center", justifyContent: "center", fontSize: "26px",
+          animation: "pulse 2s ease-in-out infinite",
         }}>🌿</div>
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-
-      <h2 style={{ color: "#fff", fontSize: "20px", marginBottom: "36px", fontWeight: "700" }}>
+      <h2 style={{ color: "#fff", fontSize: "20px", marginBottom: "40px", fontWeight: "700", textAlign: "center" }}>
         bloom מעצב את הגינה שלך
       </h2>
 
-      {STEPS.map((s, i) => (
-        <div key={i} style={{
-          display: "flex", alignItems: "center", gap: "14px",
-          marginBottom: "18px", width: "100%", maxWidth: "300px",
-          opacity: i <= step ? 1 : 0.3, transition: "opacity 0.6s ease",
-        }}>
-          <span style={{ fontSize: "20px" }}>
-            {i < step ? "✅" : i === step ? "⏳" : "⭕"}
-          </span>
-          <span style={{ color: "#d0f0c8", fontSize: "15px" }}>{s}</span>
-          {i === step && (
-            <span style={{ fontSize: "11px", color: "#7bc47a", marginRight: "auto" }}>
-              {i === 2 ? "~20 שנ׳" : "~5 שנ׳"}
-            </span>
-          )}
-        </div>
-      ))}
+      <div style={{ width: "100%", maxWidth: "300px" }}>
+        {STEPS.map((s, i) => {
+          const isDone   = i < step;
+          const isActive = i === step;
+          const isPending = i > step;
+
+          return (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", gap: "14px",
+              marginBottom: "20px",
+              opacity: isPending ? 0.35 : 1,
+              transition: "opacity 0.4s ease",
+            }}>
+              {/* אייקון */}
+              <div style={{
+                width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: isDone ? "14px" : "18px",
+                background: isDone ? "#7bc47a" : isActive ? "rgba(123,196,122,0.15)" : "rgba(255,255,255,0.06)",
+                border: isDone ? "none" : isActive ? "1.5px solid rgba(123,196,122,0.5)" : "1.5px solid rgba(255,255,255,0.1)",
+                animation: isActive ? "spin 1.2s linear infinite" : "none",
+                color: isDone ? "#1a3a18" : "white",
+                fontWeight: "700",
+              }}>
+                {isDone ? "✓" : isActive ? "↻" : "○"}
+              </div>
+
+              {/* תווית */}
+              <span style={{ color: isDone ? "#7bc47a" : isActive ? "#d0f0c8" : "#6b9068", fontSize: "15px", flex: 1 }}>
+                {s.label}
+              </span>
+
+              {/* זמן משוער */}
+              {isActive && (
+                <span style={{ fontSize: "11px", color: "#7bc47a" }}>{s.time}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 // ── Results ───────────────────────────────────────────
 function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => void }) {
-  const [ordered, setOrdered] = useState(false);
+  const [ordered,   setOrdered]   = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const total = result.recommendations.reduce((s, p) => s + p.price, 0);
 
@@ -108,19 +165,19 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
 
       <div style={{ padding: "16px" }}>
 
-        {/* DALL-E Image (אם יש) */}
+        {/* DALL-E image */}
         {result.imageUrl && (
           <div style={{ marginBottom: "14px" }}>
             <p style={{ fontSize: "11px", color: "#999", marginBottom: "6px", textAlign: "center" }}>
               הדמיית AI — איך הגינה יכולה להיראות
             </p>
             <div style={{ borderRadius: "16px", overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}>
-              <img src={result.imageUrl} alt="הדמיית הגינה" style={{ width: "100%", display: "block" }} />
+              <img src={result.imageUrl} alt="הדמיה" style={{ width: "100%", display: "block" }} />
             </div>
           </div>
         )}
 
-        {/* BalconySVG — תכנית המוצרים */}
+        {/* SVG */}
         <div style={{ marginBottom: "14px" }}>
           <p style={{ fontSize: "11px", color: "#999", marginBottom: "6px", textAlign: "center" }}>
             {result.imageUrl ? "המוצרים שיהיו בגינה שלך" : "הגינה שלך עם המוצרים"}
@@ -156,7 +213,7 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
           )}
         </div>
 
-        {/* רשימת מוצרים */}
+        {/* מוצרים */}
         <div style={{
           background: "#fff", borderRadius: "14px", padding: "14px",
           marginBottom: "14px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
@@ -200,7 +257,7 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
           </div>
         </div>
 
-        {/* כפתור הזמנה */}
+        {/* הזמנה */}
         {!ordered ? (
           <button onClick={() => setOrdered(true)} style={{
             width: "100%", padding: "17px", background: "#2d5a27", color: "#fff",
@@ -228,7 +285,7 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
           ← נסה עם תמונה אחרת
         </button>
 
-        {/* Debug Log (מכובה כברירת מחדל) */}
+        {/* Debug */}
         {result.debug?.log && (
           <div style={{ marginBottom: "24px" }}>
             <button onClick={() => setShowDebug(!showDebug)} style={{
@@ -241,7 +298,7 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
             {showDebug && (
               <div style={{
                 background: "#1a1a1a", borderRadius: "8px", padding: "12px",
-                marginTop: "8px", maxHeight: "200px", overflowY: "auto",
+                marginTop: "8px", maxHeight: "220px", overflowY: "auto",
               }}>
                 {result.debug.log.map((line, i) => (
                   <div key={i} style={{ fontFamily: "monospace", fontSize: "11px", color: "#88ff88", marginBottom: "3px" }}>
@@ -259,9 +316,9 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
 
 // ── Main ──────────────────────────────────────────────
 export default function Home() {
-  const [state, setState] = useState<AppState>("idle");
-  const [step,  setStep]  = useState(0);
-  const [result, setResult] = useState<ApiResult | null>(null);
+  const [state,    setState]    = useState<AppState>("idle");
+  const [step,     setStep]     = useState(0);
+  const [result,   setResult]   = useState<ApiResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -269,52 +326,68 @@ export default function Home() {
     setState("loading");
     setStep(0);
 
-    // כיווץ תמונה
-    const base64Full = await new Promise<string>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX = 800;
-        let { width, height } = img;
-        if (width > height && width > MAX) { height = Math.round(height * MAX / width);  width = MAX; }
-        else if (height > MAX)             { width  = Math.round(width  * MAX / height); height = MAX; }
-        canvas.width = width; canvas.height = height;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.75));
-      };
-      img.onerror = reject;
-      img.src = URL.createObjectURL(file);
-    });
-
-    const interval = setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 3500);
-
     try {
+      const base64Full = await compressImage(file);
+
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64Full.split(",")[1], mimeType: file.type || "image/jpeg" }),
+        body: JSON.stringify({
+          imageBase64: base64Full.split(",")[1],
+          mimeType: file.type || "image/jpeg",
+        }),
       });
 
-      clearInterval(interval);
+      if (!res.body) throw new Error("אין תגובה מהשרת");
 
-      const data: ApiResult & { error?: string } = await res.json();
+      // ── קריאת SSE stream ──────────────────────────
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = "";
 
-      if (!res.ok || data.error) {
-        throw new Error(data.error ?? "שגיאת שרת");
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // פרסור שורות SSE
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? ""; // שמור שורה חלקית לסיבוב הבא
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          let event: Record<string, unknown>;
+          try { event = JSON.parse(jsonStr); }
+          catch { continue; }
+
+          if (event.type === "step") {
+            // עדכן שלב רק כשהשרת סיים אותו בפועל
+            setStep(event.step as number);
+
+          } else if (event.type === "done") {
+            setResult(event as unknown as ApiResult);
+            setState("results");
+
+          } else if (event.type === "error") {
+            throw new Error(event.message as string);
+          }
+        }
       }
 
-      setResult(data);
-      setState("results");
-
     } catch (err: unknown) {
-      clearInterval(interval);
       setErrorMsg(err instanceof Error ? err.message : "שגיאה לא ידועה");
       setState("error");
     }
   };
 
   if (state === "loading") return <LoadingScreen step={step} />;
-  if (state === "results" && result) return <ResultsScreen result={result} onReset={() => { setState("idle"); setResult(null); }} />;
+  if (state === "results" && result) {
+    return <ResultsScreen result={result} onReset={() => { setState("idle"); setResult(null); }} />;
+  }
 
   // Idle / Error
   return (
@@ -329,7 +402,10 @@ export default function Home() {
       </div>
 
       <div style={{ padding: "0 16px 32px" }}>
-        <div style={{ background: "#fff", borderRadius: "20px", padding: "28px 20px", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+        <div style={{
+          background: "#fff", borderRadius: "20px", padding: "28px 20px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+        }}>
 
           {state === "error" && (
             <div style={{
@@ -347,12 +423,19 @@ export default function Home() {
             <p style={{ margin: "0 0 5px", fontWeight: "700", color: "#2d5a27", fontSize: "17px" }}>
               צלם את המרפסת שלך
             </p>
-            <p style={{ margin: 0, color: "#999", fontSize: "13px" }}>או לחץ לבחור תמונה מהגלריה</p>
+            <p style={{ margin: 0, color: "#999", fontSize: "13px" }}>
+              או לחץ לבחור תמונה מהגלריה
+            </p>
           </div>
 
-          <input ref={fileRef} type="file" accept="image/*" capture="environment"
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             style={{ display: "none" }}
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          />
 
           <div style={{ display: "flex", justifyContent: "space-around" }}>
             {[["📸","מצלם"],["🤖","AI מנתח"],["🌿","גינה מוכנה"]].map(([icon,label]) => (
