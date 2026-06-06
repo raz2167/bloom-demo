@@ -16,6 +16,22 @@ export interface PlacedProduct {
   label:      string;
 }
 
+interface CloudinaryResource {
+  public_id:   string;
+  secure_url:  string;
+  width:       number;
+  height:      number;
+}
+
+interface CatalogItem {
+  id:     string;
+  name:   string;
+  url:    string;
+  width:  number;
+  height: number;
+  folder: string;
+}
+
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const log: string[] = [];
@@ -55,7 +71,11 @@ export async function POST(req: NextRequest) {
                 content: [
                   {
                     type: "image",
-                    source: { type: "base64", media_type: mimeType as "image/jpeg" | "image/png" | "image/webp", data: imageBase64 },
+                    source: {
+                      type: "base64",
+                      media_type: mimeType as "image/jpeg" | "image/png" | "image/webp",
+                      data: imageBase64,
+                    },
                   },
                   {
                     type: "text",
@@ -70,7 +90,7 @@ export async function POST(req: NextRequest) {
   "floor_color": "תיאור קצר",
   "notes": "הערה קצרה"
 }
-חשוב: width_m ו-depth_m הם מספרים עשרוניים בלבד, הערכה בהתאם לתמונה.`,
+חשוב: width_m ו-depth_m הם מספרים עשרוניים בלבד.`,
                   },
                 ],
               }],
@@ -92,9 +112,8 @@ export async function POST(req: NextRequest) {
         let analysis: Record<string, string | number>;
         try {
           analysis = JSON.parse(jsonStr);
-          // ודא שיש ערכי ברירת מחדל
-          if (!analysis.width_m)  analysis.width_m  = 4.0;
-          if (!analysis.depth_m)  analysis.depth_m  = 2.5;
+          if (!analysis.width_m) analysis.width_m = 4.0;
+          if (!analysis.depth_m) analysis.depth_m = 2.5;
           L(`🟢 [1] ניתוח: ${JSON.stringify(analysis)}`);
         } catch {
           return fail("שגיאה בניתוח התמונה");
@@ -102,58 +121,59 @@ export async function POST(req: NextRequest) {
 
         send({ type: "step", step: 1, analysis });
 
-        // ── שלב 2: Cloudinary ────────────────────────
+        // ── שלב 2: Cloudinary Search API ─────────────
         L("🟡 [2] טוען קטלוג...");
         send({ type: "step", step: 2 });
 
-        let catalog: Array<{ id: string; name: string; url: string; width: number; height: number; folder: string }> = [];
+        let catalog: CatalogItem[] = [];
 
         const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
         const apiKey    = process.env.CLOUDINARY_API_KEY;
         const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
         if (cloudName && apiKey && apiSecret) {
-          const auth   = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
-          const prefix = `Nurseries/${nursery}`;
+          const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
           try {
-            const catRes = await fetch(
-  `https://api.cloudinary.com/v1_1/${cloudName}/resources/search`,
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      expression: `folder:Nurseries/${nursery}/*`,
-      max_results: 50,
-    }),
-  }
-);
-const catData = await catRes.json();
-catalog = (catData.resources || []).map((r: {
-  public_id: string; secure_url: string; width: number; height: number;
-}) => {
-  const parts  = r.public_id.split("/");
-  const folder = parts[parts.length - 2] || "combinations";
-  const name   = (parts[parts.length - 1] || "").replace(/[-_]/g, " ");
-  return { id: r.public_id, name, url: r.secure_url, width: r.width, height: r.height, folder };
-});
-L(`🟢 [2] ${catalog.length} מוצרים נמצאו`);
-            const catData = await catRes.json();
-            catalog = (catData.resources || []).map((r: { public_id: string; secure_url: string; width: number; height: number }) => {
+            const searchRes = await fetch(
+              `https://api.cloudinary.com/v1_1/${cloudName}/resources/search`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Basic ${auth}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  expression: `folder:Nurseries/${nursery}/*`,
+                  max_results: 50,
+                }),
+              }
+            );
+            const searchData = await searchRes.json();
+            L(`🟢 [2] Search status: ${searchRes.status}`);
+            L(`🟢 [2] Raw response: ${JSON.stringify(searchData).substring(0, 200)}`);
+
+            catalog = (searchData.resources || []).map((r: CloudinaryResource) => {
               const parts  = r.public_id.split("/");
               const folder = parts[parts.length - 2] || "combinations";
               const name   = (parts[parts.length - 1] || "").replace(/[-_]/g, " ");
-              return { id: r.public_id, name, url: r.secure_url, width: r.width, height: r.height, folder };
+              return {
+                id:     r.public_id,
+                name,
+                url:    r.secure_url,
+                width:  r.width,
+                height: r.height,
+                folder,
+              };
             });
             L(`🟢 [2] ${catalog.length} מוצרים`);
           } catch (e) {
             L(`🔴 [2] Cloudinary: ${e}`);
           }
+        } else {
+          L("🔴 [2] חסרים פרטי Cloudinary");
         }
 
-        // ── שלב 3: Claude מתכנן מיקום ────────────────
+        // ── שלב 3: תכנון מיקום ───────────────────────
         L("🟡 [3] מתכנן מיקום...");
         send({ type: "step", step: 3 });
 
@@ -191,18 +211,17 @@ L(`🟢 [2] ${catalog.length} מוצרים נמצאו`);
   ]
 }
 
-חוקים: 3-5 מוצרים, אל תחפוף (x+width < x הבא), y בין 45-80.`,
+חוקים: 3-5 מוצרים, אל תחפוף, y בין 45-80.`,
               }],
             });
 
-            const pRaw  = pm.content[0].type === "text" ? pm.content[0].text.trim() : "{}";
-            const pJson = pRaw.replace(/```json|```/g, "").trim();
+            const pRaw   = pm.content[0].type === "text" ? pm.content[0].text.trim() : "{}";
+            const pJson  = pRaw.replace(/```json|```/g, "").trim();
             const parsed = JSON.parse(pJson);
-            placements = Array.isArray(parsed.placements) ? parsed.placements : [];
+            placements   = Array.isArray(parsed.placements) ? parsed.placements : [];
             L(`🟢 [3] ${placements.length} מיקומים`);
           } catch (e) {
-            L(`🔴 [3] כשל מיקום: ${e} — fallback`);
-            // fallback אוטומטי
+            L(`🔴 [3] כשל: ${e} — fallback`);
             placements = catalog.slice(0, 3).map((p, i) => ({
               productId:  p.id,
               productUrl: p.url,
@@ -215,8 +234,8 @@ L(`🟢 [2] ${catalog.length} מוצרים נמצאו`);
           }
         }
 
-        // ── שלב 4: DALL-E שרטוט קווי ─────────────────
-        L("🟡 [4] DALL-E שרטוט...");
+        // ── שלב 4: DALL-E ─────────────────────────────
+        L("🟡 [4] DALL-E...");
         send({ type: "step", step: 4 });
 
         let imageUrl: string | null = null;
@@ -227,13 +246,13 @@ L(`🟢 [2] ${catalog.length} מוצרים נמצאו`);
             "ברזל":   "iron vertical bars railing",
             "בטון":   "solid concrete parapet",
             "עץ":     "wooden railing",
-            "אין":    "open edge no railing",
+            "אין":    "open edge",
           };
           const prompt =
             `Clean architectural line drawing of a balcony viewed from inside. ` +
             `${railMap[String(analysis.railing)] || "glass railing"}, ` +
-            `white tiled floor with grid, sliding glass door frames on sides. ` +
-            `Black thin lines on pure white background, no shading, no color, no fills. ` +
+            `white tiled floor with grid, glass door frames on sides. ` +
+            `Black thin lines on pure white background, no shading, no color. ` +
             `Technical drawing style, frontal view, ${analysis.width_m}m wide.`;
 
           try {
@@ -248,11 +267,8 @@ L(`🟢 [2] ${catalog.length} מוצרים נמצאו`);
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model:   "gpt-image-2",
-                prompt,
-                n:       1,
-                size:    "1024x1024",
-                quality: "medium",
+                model: "gpt-image-2", prompt, n: 1,
+                size: "1024x1024", quality: "medium",
               }),
             });
 
@@ -260,11 +276,15 @@ L(`🟢 [2] ${catalog.length} מוצרים נמצאו`);
             L(`🟢 [4] status: ${dr.status}`);
             const dd = await dr.json();
 
-            if (dd.data?.[0]?.b64_json)  imageUrl = `data:image/png;base64,${dd.data[0].b64_json}`;
-            else if (dd.data?.[0]?.url)  imageUrl = dd.data[0].url;
-            else                         L(`🔴 [4] ${JSON.stringify(dd).substring(0, 120)}`);
-
-            if (imageUrl) L("🟢 [4] תמונה התקבלה!");
+            if (dd.data?.[0]?.b64_json) {
+              imageUrl = `data:image/png;base64,${dd.data[0].b64_json}`;
+              L("🟢 [4] תמונה!");
+            } else if (dd.data?.[0]?.url) {
+              imageUrl = dd.data[0].url;
+              L("🟢 [4] URL!");
+            } else {
+              L(`🔴 [4] ${JSON.stringify(dd).substring(0, 120)}`);
+            }
           } catch (e: unknown) {
             const isAbort = e instanceof Error && e.name === "AbortError";
             L(`🔴 [4] ${isAbort ? "timeout" : (e instanceof Error ? e.message : "שגיאה")}`);
