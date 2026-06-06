@@ -142,10 +142,7 @@ export async function POST(req: NextRequest) {
 
           try {
             const abortCtrl = new AbortController();
-            const tid = setTimeout(() => {
-              abortCtrl.abort();
-              L("🔴 [5] timeout אחרי 25 שניות");
-            }, 25000);
+            const tid = setTimeout(() => abortCtrl.abort(), 45000);
 
             const dalleRes = await fetch(
               "https://api.openai.com/v1/images/generations",
