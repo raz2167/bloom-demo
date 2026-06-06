@@ -2,7 +2,15 @@
 // app/page.tsx — שרטוט קווי + overlay מוצרים מ-Cloudinary
 
 import { useState, useRef } from "react";
-import type { PlacedProduct } from "@/app/api/analyze/route";
+interface PlacedProduct {
+  productId:  string;
+  productUrl: string;
+  name:       string;
+  x:          number;
+  y:          number;
+  width:      number;
+  label:      string;
+}
 
 type AppState = "idle" | "loading" | "results" | "error";
 
