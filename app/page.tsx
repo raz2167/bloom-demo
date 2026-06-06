@@ -1,7 +1,11 @@
 "use client";
-// app/page.tsx — שרטוט קווי + overlay מוצרים מ-Cloudinary
+// app/page.tsx
 
 import { useState, useRef } from "react";
+
+type AppState = "idle" | "loading" | "results" | "error";
+
+// הגדרת הטיפוסים ישירות כאן (לא מיובא מ-route)
 interface PlacedProduct {
   productId:  string;
   productUrl: string;
@@ -12,31 +16,29 @@ interface PlacedProduct {
   label:      string;
 }
 
-type AppState = "idle" | "loading" | "results" | "error";
-
 interface Analysis {
-  balcony_size: string;
-  width_m: number;
-  depth_m: number;
-  sun_exposure: string;
-  style: string;
-  railing: string;
-  notes: string;
+  balcony_size:  string;
+  width_m?:      number;
+  depth_m?:      number;
+  sun_exposure:  string;
+  style:         string;
+  railing:       string;
+  notes?:        string;
 }
 
 interface ApiResult {
-  analysis: Analysis;
-  placements: PlacedProduct[];
-  imageUrl: string | null;
-  debug?: { log: string[] };
+  analysis:    Analysis;
+  placements:  PlacedProduct[];
+  imageUrl:    string | null;
+  debug?:      { log: string[] };
 }
 
 const STEPS = [
-  { label: "מנתח את המרפסת...",         time: "~10 שנ׳" },
-  { label: "מזהה תנאים ועיצוב...",      time: "~3 שנ׳"  },
-  { label: "טוען קטלוג מוצרים...",      time: "~3 שנ׳"  },
-  { label: "מתכנן את הגינה...",         time: "~5 שנ׳"  },
-  { label: "מעצב שרטוט...",             time: "~20 שנ׳" },
+  { label: "מנתח את המרפסת...",        time: "~10 שנ׳" },
+  { label: "מזהה תנאים ועיצוב...",     time: "~3 שנ׳"  },
+  { label: "טוען קטלוג מוצרים...",     time: "~3 שנ׳"  },
+  { label: "מתכנן את הגינה...",        time: "~5 שנ׳"  },
+  { label: "מעצב שרטוט...",            time: "~25 שנ׳" },
 ];
 
 async function compressImage(file: File): Promise<string> {
@@ -46,8 +48,8 @@ async function compressImage(file: File): Promise<string> {
       const canvas = document.createElement("canvas");
       const MAX = 800;
       let { width, height } = img;
-      if (width > height && width > MAX) { height = Math.round(height * MAX / width);  width = MAX; }
-      else if (height > MAX)             { width  = Math.round(width  * MAX / height); height = MAX; }
+      if (width > height && width > MAX) { height = Math.round(height * MAX / width); width = MAX; }
+      else if (height > MAX) { width = Math.round(width * MAX / height); height = MAX; }
       canvas.width = width; canvas.height = height;
       canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL("image/jpeg", 0.75));
@@ -69,13 +71,11 @@ function LoadingScreen({ step }: { step: number }) {
       <style>{`
         @keyframes spin    { to { transform: rotate(360deg); } }
         @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
-        @keyframes blink   { 0%,100%{opacity:.3} 50%{opacity:1} }
       `}</style>
-
-      <div style={{ position: "relative", width: "100px", height: "100px", marginBottom: "36px" }}>
+      <div style={{ position: "relative", width: "90px", height: "90px", marginBottom: "36px" }}>
         {[0,1,2].map(i => (
           <div key={i} style={{
-            position: "absolute", inset: `${i*12}px`, borderRadius: "50%",
+            position: "absolute", inset: `${i*11}px`, borderRadius: "50%",
             border: "2px solid transparent",
             borderTopColor: `rgba(122,168,112,${0.9 - i*0.25})`,
             animation: `spin ${1.2 + i*0.6}s linear infinite ${i%2 ? "reverse" : ""}`,
@@ -84,31 +84,26 @@ function LoadingScreen({ step }: { step: number }) {
         <div style={{
           position: "absolute", inset: 0, display: "flex",
           alignItems: "center", justifyContent: "center",
-          fontSize: "26px", animation: "breathe 2.5s ease-in-out infinite",
+          fontSize: "24px", animation: "breathe 2.5s ease-in-out infinite",
         }}>🌿</div>
       </div>
-
-      <h2 style={{ color: "#FAF8F5", fontSize: "20px", marginBottom: "40px", fontWeight: "200", letterSpacing: "-0.5px", textAlign: "center" }}>
+      <h2 style={{ color: "#FAF8F5", fontSize: "18px", marginBottom: "36px", fontWeight: "200", textAlign: "center" }}>
         מעצבים את הגינה שלך
       </h2>
-
-      <div style={{ width: "100%", maxWidth: "300px" }}>
+      <div style={{ width: "100%", maxWidth: "290px" }}>
         {STEPS.map((s, i) => {
-          const isDone    = i < step;
-          const isActive  = i === step;
-          const isPending = i > step;
+          const isDone   = i < step;
+          const isActive = i === step;
           return (
             <div key={i} style={{
-              display: "flex", alignItems: "center", gap: "14px",
-              marginBottom: "18px",
-              opacity: isPending ? 0.25 : 1,
-              transition: "opacity 0.5s ease",
+              display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px",
+              opacity: i > step ? 0.25 : 1, transition: "opacity 0.5s",
             }}>
               <div style={{
-                width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0,
+                width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: isDone ? "13px" : "16px",
-                background: isDone ? "#7AA870" : isActive ? "rgba(122,168,112,0.15)" : "transparent",
+                fontSize: isDone ? "12px" : "14px",
+                background: isDone ? "#7AA870" : "transparent",
                 border: isDone ? "none" : `1.5px solid ${isActive ? "rgba(122,168,112,0.5)" : "rgba(255,255,255,0.1)"}`,
                 color: isDone ? "#1a3a18" : "white",
                 animation: isActive ? "spin 1.5s linear infinite" : "none",
@@ -116,7 +111,7 @@ function LoadingScreen({ step }: { step: number }) {
               }}>
                 {isDone ? "✓" : isActive ? "↻" : "○"}
               </div>
-              <span style={{ color: isDone ? "#7AA870" : isActive ? "#d0f0c8" : "#5a7258", fontSize: "14px", flex: 1 }}>
+              <span style={{ color: isDone ? "#7AA870" : isActive ? "#d0f0c8" : "#5a7258", fontSize: "13px", flex: 1 }}>
                 {s.label}
               </span>
               {isActive && <span style={{ fontSize: "10px", color: "#7AA870" }}>{s.time}</span>}
@@ -128,53 +123,52 @@ function LoadingScreen({ step }: { step: number }) {
   );
 }
 
-// ── Overlay visualization ─────────────────────────────
+// ── Overlay ───────────────────────────────────────────
 function BalconyOverlay({ imageUrl, placements }: { imageUrl: string | null; placements: PlacedProduct[] }) {
+  const safePlacements = placements || [];
+
   return (
     <div style={{ position: "relative", width: "100%", borderRadius: "16px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.15)" }}>
-
-      {/* שרטוט קווי — רקע */}
       {imageUrl ? (
-        <img src={imageUrl} alt="שרטוט המרפסת" style={{ width: "100%", display: "block" }} />
+        <img src={imageUrl} alt="שרטוט" style={{ width: "100%", display: "block" }} />
       ) : (
-        // Fallback אם אין שרטוט
         <div style={{ width: "100%", paddingBottom: "75%", background: "#F5F0E8", position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#C4B8A8", fontSize: "13px" }}>
-            שרטוט לא זמין
+            שרטוט בהכנה...
           </div>
         </div>
       )}
 
-      {/* overlay מוצרים */}
-      {placements.map((p, i) => (
-        <img
-          key={i}
-          src={p.productUrl}
-          alt={p.name}
-          title={p.label}
-          style={{
-            position:  "absolute",
-            left:      `${p.x}%`,
-            top:       `${p.y}%`,
-            width:     `${p.width}%`,
-            height:    "auto",
-            filter:    "drop-shadow(0 4px 8px rgba(0,0,0,0.25))",
-            transition: "opacity 0.3s",
-          }}
-        />
+      {safePlacements.map((p, i) => (
+        p.productUrl ? (
+          <img
+            key={i}
+            src={p.productUrl}
+            alt={p.name || ""}
+            style={{
+              position:  "absolute",
+              left:      `${p.x || 0}%`,
+              top:       `${p.y || 60}%`,
+              width:     `${p.width || 25}%`,
+              height:    "auto",
+              filter:    "drop-shadow(0 4px 8px rgba(0,0,0,0.2))",
+            }}
+          />
+        ) : null
       ))}
 
-      {/* תווית HiBloom */}
       <div style={{
         position: "absolute", bottom: 0, left: 0, right: 0,
-        padding: "10px 16px",
-        background: "linear-gradient(to top, rgba(26,23,20,0.7), transparent)",
-        display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+        padding: "8px 14px",
+        background: "linear-gradient(to top, rgba(26,23,20,0.6), transparent)",
+        display: "flex", justifyContent: "space-between",
       }}>
-        <span style={{ color: "rgba(250,248,245,0.6)", fontSize: "10px", letterSpacing: "2px" }}>HIBLOOM</span>
-        <span style={{ color: "rgba(250,248,245,0.8)", fontSize: "11px" }}>
-          {placements.length} אלמנטים
-        </span>
+        <span style={{ color: "rgba(250,248,245,0.5)", fontSize: "9px", letterSpacing: "2px" }}>HIBLOOM</span>
+        {safePlacements.length > 0 && (
+          <span style={{ color: "rgba(250,248,245,0.7)", fontSize: "10px" }}>
+            {safePlacements.length} אלמנטים
+          </span>
+        )}
       </div>
     </div>
   );
@@ -185,79 +179,88 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
   const [ordered,   setOrdered]   = useState(false);
   const [showDebug, setShowDebug] = useState(false);
 
+  // הגנה מפני undefined
+  const analysis   = result.analysis   || {};
+  const placements = result.placements || [];
+
   const SUN: Record<string, string> = {
     "שמש מלאה": "☀️", "חצי צל": "⛅", "צל": "🌑",
   };
 
+  const tags = [
+    analysis.sun_exposure ? `${SUN[analysis.sun_exposure] || ""} ${analysis.sun_exposure}` : null,
+    analysis.width_m && analysis.depth_m ? `📐 ${analysis.width_m}×${analysis.depth_m} מ׳` : null,
+    analysis.style ? `🎨 ${analysis.style}` : null,
+  ].filter(Boolean) as string[];
+
   return (
     <div dir="rtl" style={{ background: "#FAF7F2", minHeight: "100vh", fontFamily: "sans-serif" }}>
 
-      {/* Header */}
       <div style={{ background: "#1A1714", padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ color: "#FAF7F2", fontSize: "16px", fontWeight: "300", letterSpacing: "2px" }}>HIBLOOM</span>
-        <span style={{ color: "rgba(250,247,242,0.4)", fontSize: "12px" }}>הגינה שלך</span>
+        <span style={{ color: "#FAF7F2", fontSize: "15px", fontWeight: "300", letterSpacing: "3px" }}>HIBLOOM</span>
+        <span style={{ color: "rgba(250,247,242,0.35)", fontSize: "11px" }}>הגינה שלך</span>
       </div>
 
       <div style={{ padding: "16px" }}>
 
-        {/* Overlay visualization */}
-        <div style={{ marginBottom: "16px" }}>
-          <BalconyOverlay imageUrl={result.imageUrl} placements={result.placements} />
+        {/* Overlay */}
+        <div style={{ marginBottom: "14px" }}>
+          <BalconyOverlay imageUrl={result.imageUrl} placements={placements} />
         </div>
 
         {/* ניתוח */}
-        <div style={{
-          background: "#fff", borderRadius: "14px", padding: "14px",
-          marginBottom: "12px", boxShadow: "0 1px 0 rgba(139,125,107,0.1), 0 4px 16px rgba(26,23,20,0.04)",
-        }}>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {[
-              `${SUN[result.analysis.sun_exposure] || ""} ${result.analysis.sun_exposure}`,
-              `📐 ${result.analysis.width_m}×${result.analysis.depth_m} מ׳`,
-              `🎨 ${result.analysis.style}`,
-            ].map((tag, i) => (
-              <span key={i} style={{
-                background: "#F5F0E8", color: "#5C4A35",
-                padding: "5px 11px", borderRadius: "20px",
-                fontSize: "12px", fontWeight: "500",
-              }}>{tag}</span>
-            ))}
-          </div>
-          {result.analysis.notes && (
-            <p style={{ margin: "10px 0 0", color: "#8B7D6B", fontSize: "12px", lineHeight: "1.6" }}>
-              {result.analysis.notes}
-            </p>
-          )}
-        </div>
-
-        {/* רשימת מוצרים */}
-        {result.placements.length > 0 && (
+        {tags.length > 0 && (
           <div style={{
             background: "#fff", borderRadius: "14px", padding: "14px",
             marginBottom: "12px", boxShadow: "0 1px 0 rgba(139,125,107,0.1), 0 4px 16px rgba(26,23,20,0.04)",
           }}>
-            <h3 style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: "600", color: "#1A1714", letterSpacing: "0.3px" }}>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {tags.map((tag, i) => (
+                <span key={i} style={{
+                  background: "#F5F0E8", color: "#5C4A35",
+                  padding: "5px 11px", borderRadius: "20px",
+                  fontSize: "12px", fontWeight: "500",
+                }}>{tag}</span>
+              ))}
+            </div>
+            {analysis.notes && (
+              <p style={{ margin: "10px 0 0", color: "#8B7D6B", fontSize: "12px", lineHeight: "1.6" }}>
+                {analysis.notes}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* מוצרים */}
+        {placements.length > 0 && (
+          <div style={{
+            background: "#fff", borderRadius: "14px", padding: "14px",
+            marginBottom: "12px", boxShadow: "0 1px 0 rgba(139,125,107,0.1), 0 4px 16px rgba(26,23,20,0.04)",
+          }}>
+            <h3 style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: "600", color: "#1A1714" }}>
               הערכה שנבחרה עבורך
             </h3>
-            <p style={{ margin: "0 0 14px", color: "#8B7D6B", fontSize: "11px" }}>
-              {result.placements.length} פריטים · מותאמים אישית
+            <p style={{ margin: "0 0 12px", color: "#8B7D6B", fontSize: "11px" }}>
+              {placements.length} פריטים · מותאמים אישית
             </p>
 
-            {result.placements.map((p, i) => (
+            {placements.map((p, i) => (
               <div key={i} style={{
                 display: "flex", alignItems: "center", gap: "12px",
                 padding: "10px 0", borderBottom: "1px solid #F5F0E8",
               }}>
-                <div style={{
-                  width: "52px", height: "52px", borderRadius: "10px", flexShrink: 0,
-                  background: "#F5F0E8", overflow: "hidden",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <img src={p.productUrl} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                </div>
+                {p.productUrl && (
+                  <div style={{
+                    width: "52px", height: "52px", borderRadius: "10px",
+                    background: "#F5F0E8", overflow: "hidden", flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <img src={p.productUrl} alt={p.name || ""} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  </div>
+                )}
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: "600", fontSize: "14px", color: "#1A1714" }}>{p.name}</div>
-                  <div style={{ fontSize: "11px", color: "#8B7D6B", marginTop: "2px" }}>{p.label}</div>
+                  <div style={{ fontWeight: "600", fontSize: "14px", color: "#1A1714" }}>{p.name || ""}</div>
+                  <div style={{ fontSize: "11px", color: "#8B7D6B", marginTop: "2px" }}>{p.label || ""}</div>
                 </div>
               </div>
             ))}
@@ -270,7 +273,6 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
             width: "100%", padding: "17px", background: "#1A1714", color: "#FAF7F2",
             border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: "600",
             fontFamily: "sans-serif", cursor: "pointer", marginBottom: "10px",
-            letterSpacing: "0.3px",
           }}>
             הזמן ערכה
           </button>
@@ -288,8 +290,8 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
         <button onClick={onReset} style={{
           width: "100%", padding: "13px", background: "transparent",
           color: "#8B7D6B", border: "1px solid rgba(139,125,107,0.25)",
-          borderRadius: "12px", fontSize: "13px", cursor: "pointer", marginBottom: "12px",
-          fontFamily: "sans-serif",
+          borderRadius: "12px", fontSize: "13px", cursor: "pointer",
+          fontFamily: "sans-serif", marginBottom: "12px",
         }}>
           ← נסה עם תמונה אחרת
         </button>
@@ -302,7 +304,7 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
               color: "#C4B8A8", border: "1px dashed rgba(139,125,107,0.2)",
               borderRadius: "8px", fontSize: "11px", cursor: "pointer", fontFamily: "sans-serif",
             }}>
-              {showDebug ? "▲ הסתר לוגים" : "▼ הצג לוגים"}
+              {showDebug ? "▲ הסתר לוגים" : "▼ הצג לוגים (debug)"}
             </button>
             {showDebug && (
               <div style={{
@@ -318,6 +320,7 @@ function ResultsScreen({ result, onReset }: { result: ApiResult; onReset: () => 
             )}
           </div>
         )}
+
       </div>
     </div>
   );
@@ -334,10 +337,8 @@ export default function Home() {
   const handleFile = async (file: File) => {
     setState("loading");
     setStep(0);
-
     try {
       const base64Full = await compressImage(file);
-
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -347,7 +348,6 @@ export default function Home() {
           nursery: "Bloom_Demo",
         }),
       });
-
       if (!res.body) throw new Error("אין תגובה מהשרת");
 
       const reader  = res.body.getReader();
@@ -360,23 +360,24 @@ export default function Home() {
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
-
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const jsonStr = line.slice(6).trim();
           if (!jsonStr) continue;
-
           let event: Record<string, unknown>;
           try { event = JSON.parse(jsonStr); } catch { continue; }
-
-          if (event.type === "step") {
-            setStep(event.step as number);
-          } else if (event.type === "done") {
-            setResult(event as unknown as ApiResult);
+          if (event.type === "step")  setStep(event.step as number);
+          else if (event.type === "done") {
+            const r: ApiResult = {
+              analysis:   (event.analysis  as Analysis)       || {},
+              placements: (event.placements as PlacedProduct[]) || [],
+              imageUrl:   (event.imageUrl   as string | null)  || null,
+              debug:      event.debug as { log: string[] } | undefined,
+            };
+            setResult(r);
             setState("results");
-          } else if (event.type === "error") {
-            throw new Error(event.message as string);
           }
+          else if (event.type === "error") throw new Error(event.message as string);
         }
       }
     } catch (err: unknown) {
@@ -396,13 +397,13 @@ export default function Home() {
       minHeight: "100vh", fontFamily: "sans-serif",
     }}>
       <div style={{ textAlign: "center", padding: "52px 24px 60px", color: "#FAF7F2" }}>
-        <div style={{ fontSize: "11px", letterSpacing: "4px", opacity: 0.4, marginBottom: "14px", fontWeight: "400" }}>
+        <div style={{ fontSize: "10px", letterSpacing: "4px", opacity: 0.35, marginBottom: "14px" }}>
           H I B L O O M
         </div>
-        <h1 style={{ margin: "0 0 10px", fontSize: "36px", fontWeight: "200", letterSpacing: "-1px", lineHeight: 1.1 }}>
+        <h1 style={{ margin: "0 0 10px", fontSize: "34px", fontWeight: "200", letterSpacing: "-1px", lineHeight: 1.1 }}>
           הגינה שתמיד<br />דמיינת
         </h1>
-        <p style={{ margin: 0, fontSize: "15px", opacity: 0.45, fontWeight: "300" }}>
+        <p style={{ margin: 0, fontSize: "14px", opacity: 0.4, fontWeight: "300" }}>
           צלם את המרפסת שלך
         </p>
       </div>
@@ -412,7 +413,6 @@ export default function Home() {
           background: "#fff", borderRadius: "20px", padding: "28px 20px",
           boxShadow: "0 8px 32px rgba(26,23,20,0.12)",
         }}>
-
           {state === "error" && (
             <div style={{
               background: "#FEF2F2", border: "1px solid #FECACA",
@@ -420,7 +420,6 @@ export default function Home() {
               color: "#DC2626", fontSize: "13px",
             }}>❌ {errorMsg}</div>
           )}
-
           <div onClick={() => fileRef.current?.click()} style={{
             border: "1.5px dashed rgba(139,125,107,0.3)", borderRadius: "14px",
             padding: "44px 20px", textAlign: "center", cursor: "pointer",
@@ -434,22 +433,19 @@ export default function Home() {
               או לחץ לבחור תמונה מהגלריה
             </p>
           </div>
-
           <input ref={fileRef} type="file" accept="image/*" capture="environment"
             style={{ display: "none" }}
             onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-
           <div style={{ display: "flex", justifyContent: "space-around" }}>
-            {[["📸","מצלם"],["✦","מנתח"],["🌿","הגינה שלך"]].map(([icon,label]) => (
+            {[["📸","מצלם"],["✦","מנתח"],["🌿","גינה שלך"]].map(([icon,label]) => (
               <div key={label} style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "20px", color: "#8B7D6B" }}>{icon}</div>
+                <div style={{ fontSize: "18px", color: "#8B7D6B" }}>{icon}</div>
                 <div style={{ fontSize: "10px", color: "#C4B8A8", marginTop: "4px", letterSpacing: "0.5px" }}>{label}</div>
               </div>
             ))}
           </div>
         </div>
-
-        <p style={{ textAlign: "center", color: "rgba(139,125,107,0.4)", fontSize: "10px", marginTop: "18px", letterSpacing: "2px" }}>
+        <p style={{ textAlign: "center", color: "rgba(139,125,107,0.3)", fontSize: "10px", marginTop: "18px", letterSpacing: "2px" }}>
           HIBLOOM · BALCONY DESIGN
         </p>
       </div>
