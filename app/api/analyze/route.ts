@@ -112,19 +112,19 @@ export async function POST(req: NextRequest) {
             L("[2] " + catalog.length + " items");
           } catch(e) { L("[2] err: "+e); }
         }
-const bgImages = allItems.filter(i => i.folder === "Demo Balcony" || i.folder === "Demo_Balcony");
-const products = allItems.filter(i => i.folder !== "Demo Balcony" && i.folder !== "Demo_Balcony");
+const bgImages = catalog.filter(i => i.folder === "Demo Balcony" || i.folder === "Demo_Balcony");
+const products = catalog.filter(i => i.folder !== "Demo Balcony" && i.folder !== "Demo_Balcony");
 let imageUrl: string | null = null;
 if (bgImages.length > 0) {
   const empty = bgImages.find(i => !i.name.includes("צמחייה"));
   imageUrl = (empty || bgImages[0]).url;
 }
-const catalog = products;
+
         send({ type: "step", step: 3 });
         let placements: PlacedProduct[] = [];
 
-        if (catalog.length > 0) {
-          const pl = catalog.slice(0,8).map(p=>({id:p.id,name:p.name,url:p.url}));
+        if (products.length > 0) {
+          const pl = products.slice(0,8).map(p=>({id:p.id,name:p.name,url:p.url}));
           try {
             const pm = await anthropic.messages.create({
               model: "claude-sonnet-4-6", max_tokens: 800,
@@ -135,7 +135,7 @@ const catalog = products;
             placements = Array.isArray(pd.placements) ? pd.placements : [];
             L("[3] " + placements.length + " placements");
           } catch(e) {
-            placements = catalog.slice(0,3).map((p,i)=>({productId:p.id,productUrl:p.url,name:p.name,x:8+i*30,y:60,width:26,label:p.name}));
+            placements = products.slice(0,3).map((p,i)=>({productId:p.id,productUrl:p.url,name:p.name,x:8+i*30,y:60,width:26,label:p.name}));
           }
         }
 
