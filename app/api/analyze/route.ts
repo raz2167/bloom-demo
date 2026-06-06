@@ -1,197 +1,263 @@
 // app/api/analyze/route.ts
-// SSE — שולח אירועי התקדמות אמיתיים בזמן אמת
-
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { filterProducts } from "@/lib/catalog";
 
 export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+export interface PlacedProduct {
+  productId:  string;
+  productUrl: string;
+  name:       string;
+  x:          number;
+  y:          number;
+  width:      number;
+  label:      string;
+}
+
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const log: string[] = [];
-
-  // קריאת הנתונים לפני פתיחת ה-stream
   const body = await req.json();
-  const { imageBase64, mimeType = "image/jpeg" } = body;
+  const { imageBase64, mimeType = "image/jpeg", nursery = "Bloom_Demo" } = body;
 
   const stream = new ReadableStream({
     async start(ctrl) {
-
-      // פונקציות עזר
       const send = (data: object) => {
-        const line = `data: ${JSON.stringify(data)}\n\n`;
-        console.log("SSE →", JSON.stringify(data).substring(0, 120));
-        ctrl.enqueue(encoder.encode(line));
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        console.log("SSE →", JSON.stringify(data).substring(0, 100));
       };
-
-      const L = (msg: string) => {
-        console.log(msg);
-        log.push(msg);
-      };
-
-      const fail = (message: string) => {
-        L(`🔴 [FAIL] ${message}`);
-        send({ type: "error", message, debug: { log } });
+      const L = (msg: string) => { console.log(msg); log.push(msg); };
+      const fail = (msg: string) => {
+        L(`🔴 FAIL: ${msg}`);
+        send({ type: "error", message: msg, debug: { log } });
         ctrl.close();
       };
 
-      // ─────────────────────────────────────────────
       try {
-        L("🟢 [START]");
-
-        // ── בדיקות בסיסיות ──────────────────────────
         if (!imageBase64) return fail("לא התקבלה תמונה");
         if (!process.env.ANTHROPIC_API_KEY) return fail("חסר מפתח Anthropic");
 
-        L(`🟢 [1] תמונה: ${Math.round(imageBase64.length / 1024)}KB | ${mimeType}`);
-
-        // ── שלב 0: מנתח את התמונה ───────────────────
+        L(`🟢 [1] תמונה: ${Math.round(imageBase64.length / 1024)}KB`);
         send({ type: "step", step: 0 });
 
         // ── שלב 1: Claude Vision ─────────────────────
         let analysisMsg: Anthropic.Message | null = null;
-
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            L(`🟡 [2] Claude Vision ניסיון ${attempt}/3...`);
-
+            L(`🟡 [1] ניסיון ${attempt}/3`);
             analysisMsg = await anthropic.messages.create({
               model: "claude-sonnet-4-6",
-              max_tokens: 512,
-              messages: [
-                {
-                  role: "user",
-                  content: [
-                    {
-                      type: "image",
-                      source: {
-                        type: "base64",
-                        media_type: mimeType as "image/jpeg" | "image/png" | "image/webp",
-                        data: imageBase64,
-                      },
-                    },
-                    {
-                      type: "text",
-                      text: `אתה מעצב גינות מרפסת. נתח את התמונה והחזר JSON בלבד, ללא טקסט נוסף:
+              max_tokens: 600,
+              messages: [{
+                role: "user",
+                content: [
+                  {
+                    type: "image",
+                    source: { type: "base64", media_type: mimeType as "image/jpeg" | "image/png" | "image/webp", data: imageBase64 },
+                  },
+                  {
+                    type: "text",
+                    text: `אתה מעצב גינות מרפסת. נתח את התמונה והחזר JSON בלבד ללא טקסט נוסף:
 {
   "balcony_size": "קטנה|בינונית|גדולה",
+  "width_m": 4.0,
+  "depth_m": 2.5,
   "sun_exposure": "שמש מלאה|חצי צל|צל",
-  "style": "ים-תיכוני|מודרני|כפרי|מינימליסטי|בוהו",
-  "railing": "ברזל|בטון|זכוכית|עץ|אין",
+  "style": "מודרני|ים-תיכוני|כפרי|מינימליסטי",
+  "railing": "זכוכית|ברזל|בטון|עץ|אין",
   "floor_color": "תיאור קצר",
-  "notes": "הערה קצרה אחת"
-}`,
-                    },
-                  ],
-                },
-              ],
+  "notes": "הערה קצרה"
+}
+חשוב: width_m ו-depth_m הם מספרים עשרוניים בלבד, הערכה בהתאם לתמונה.`,
+                  },
+                ],
+              }],
             });
-
-            L(`🟢 [2] הצליח בניסיון ${attempt}`);
+            L("🟢 [1] הצליח");
             break;
-
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            L(`🔴 [2] ניסיון ${attempt} נכשל: ${msg.substring(0, 100)}`);
-            if (attempt === 3) return fail("השירות עמוס כרגע — נסה שוב בעוד 30 שניות 🌿");
-            await new Promise((r) => setTimeout(r, 2000 * attempt));
+            L(`🔴 [1] ניסיון ${attempt}: ${msg.substring(0, 80)}`);
+            if (attempt === 3) return fail("השירות עמוס — נסה שוב בעוד 30 שניות 🌿");
+            await new Promise(r => setTimeout(r, 2000 * attempt));
           }
         }
 
-        // ── פרסור JSON ───────────────────────────────
-        const rawText =
-          analysisMsg!.content[0].type === "text"
-            ? analysisMsg!.content[0].text.trim()
-            : "{}";
-
-        L(`🟢 [2] תשובה: ${rawText.substring(0, 150)}`);
-
+        const rawText = analysisMsg!.content[0].type === "text"
+          ? analysisMsg!.content[0].text.trim() : "{}";
         const jsonStr = rawText.replace(/```json|```/g, "").trim();
 
-        let analysis: Record<string, string>;
+        let analysis: Record<string, string | number>;
         try {
           analysis = JSON.parse(jsonStr);
-          L(`🟢 [3] ניתוח: ${JSON.stringify(analysis)}`);
+          // ודא שיש ערכי ברירת מחדל
+          if (!analysis.width_m)  analysis.width_m  = 4.0;
+          if (!analysis.depth_m)  analysis.depth_m  = 2.5;
+          L(`🟢 [1] ניתוח: ${JSON.stringify(analysis)}`);
         } catch {
-          return fail("שגיאה בניתוח התמונה, נסה שוב");
+          return fail("שגיאה בניתוח התמונה");
         }
 
-        // ── שלב 1 הושלם: שלח ניתוח ──────────────────
         send({ type: "step", step: 1, analysis });
 
-        // ── סינון מוצרים ─────────────────────────────
-        const recommendations = filterProducts(
-          analysis as Parameters<typeof filterProducts>[0]
-        );
-        L(`🟢 [4] נמצאו ${recommendations.length} מוצרים`);
-
-        // ── שלב 2 הושלם ──────────────────────────────
+        // ── שלב 2: Cloudinary ────────────────────────
+        L("🟡 [2] טוען קטלוג...");
         send({ type: "step", step: 2 });
 
-        // ── שלב 3: DALL-E ────────────────────────────
-        let imageUrl: string | null = null;
+        let catalog: Array<{ id: string; name: string; url: string; width: number; height: number; folder: string }> = [];
 
-        if (!process.env.OPENAI_API_KEY) {
-          L("🔴 [5] אין OPENAI_API_KEY");
-        } else {
-          send({ type: "step", step: 3 });
-          L("🟡 [5] שולח ל-gpt-image-2...");
+        const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+        const apiKey    = process.env.CLOUDINARY_API_KEY;
+        const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
+        if (cloudName && apiKey && apiSecret) {
+          const auth   = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
+          const prefix = `Nurseries/${nursery}`;
           try {
-            const abortCtrl = new AbortController();
-            const tid = setTimeout(() => abortCtrl.abort(), 45000);
-
-            const dalleRes = await fetch(
-              "https://api.openai.com/v1/images/generations",
-              {
-                method: "POST",
-                signal: abortCtrl.signal,
-                headers: {
-                  Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "gpt-image-2",
-                  prompt: buildPrompt(analysis),
-                  n: 1,
-                  size: "1024x1024",
-                  quality: "medium",
-                }),
-              }
+            const catRes  = await fetch(
+              `https://api.cloudinary.com/v1_1/${cloudName}/resources/image?prefix=${prefix}&type=upload&max_results=50`,
+              { headers: { Authorization: `Basic ${auth}` } }
             );
-
-            clearTimeout(tid);
-            L(`🟢 [5] status: ${dalleRes.status}`);
-
-            const dalleData = await dalleRes.json();
-
-            if (dalleData.error) {
-              L(`🔴 [5] OpenAI שגיאה: ${JSON.stringify(dalleData.error).substring(0, 100)}`);
-            } else if (dalleData.data?.[0]?.b64_json) {
-              imageUrl = `data:image/png;base64,${dalleData.data[0].b64_json}`;
-              L("🟢 [5] קיבלתי base64!");
-            } else if (dalleData.data?.[0]?.url) {
-              imageUrl = dalleData.data[0].url;
-              L("🟢 [5] קיבלתי URL!");
-            } else {
-              L(`🔴 [5] תשובה לא צפויה: ${JSON.stringify(dalleData).substring(0, 150)}`);
-            }
-          } catch (e: unknown) {
-            const isAbort = e instanceof Error && e.name === "AbortError";
-            L(`🔴 [5] ${isAbort ? "timeout" : (e instanceof Error ? e.message : "שגיאה")}`);
+            const catData = await catRes.json();
+            catalog = (catData.resources || []).map((r: { public_id: string; secure_url: string; width: number; height: number }) => {
+              const parts  = r.public_id.split("/");
+              const folder = parts[parts.length - 2] || "combinations";
+              const name   = (parts[parts.length - 1] || "").replace(/[-_]/g, " ");
+              return { id: r.public_id, name, url: r.secure_url, width: r.width, height: r.height, folder };
+            });
+            L(`🟢 [2] ${catalog.length} מוצרים`);
+          } catch (e) {
+            L(`🔴 [2] Cloudinary: ${e}`);
           }
         }
 
-        // ── שלח תוצאות ───────────────────────────────
-        L(`✅ [DONE] imageUrl: ${imageUrl ? "יש" : "אין"}`);
-        send({ type: "done", analysis, recommendations, imageUrl, debug: { log } });
+        // ── שלב 3: Claude מתכנן מיקום ────────────────
+        L("🟡 [3] מתכנן מיקום...");
+        send({ type: "step", step: 3 });
+
+        const productList = catalog.slice(0, 8).map(p => ({
+          id: p.id, name: p.name, url: p.url,
+        }));
+
+        let placements: PlacedProduct[] = [];
+
+        if (productList.length > 0) {
+          try {
+            const pm = await anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 800,
+              messages: [{
+                role: "user",
+                content: `אתה מעצב גינות. מקם מוצרים על מרפסת.
+
+מרפסת: ${analysis.width_m}מ׳ × ${analysis.depth_m}מ׳, מעקה: ${analysis.railing}, שמש: ${analysis.sun_exposure}
+
+מוצרים: ${JSON.stringify(productList)}
+
+החזר JSON בלבד:
+{
+  "placements": [
+    {
+      "productId": "public_id",
+      "productUrl": "url",
+      "name": "שם",
+      "x": 10,
+      "y": 62,
+      "width": 28,
+      "label": "תיאור"
+    }
+  ]
+}
+
+חוקים: 3-5 מוצרים, אל תחפוף (x+width < x הבא), y בין 45-80.`,
+              }],
+            });
+
+            const pRaw  = pm.content[0].type === "text" ? pm.content[0].text.trim() : "{}";
+            const pJson = pRaw.replace(/```json|```/g, "").trim();
+            const parsed = JSON.parse(pJson);
+            placements = Array.isArray(parsed.placements) ? parsed.placements : [];
+            L(`🟢 [3] ${placements.length} מיקומים`);
+          } catch (e) {
+            L(`🔴 [3] כשל מיקום: ${e} — fallback`);
+            // fallback אוטומטי
+            placements = catalog.slice(0, 3).map((p, i) => ({
+              productId:  p.id,
+              productUrl: p.url,
+              name:       p.name,
+              x:          8 + i * 30,
+              y:          60,
+              width:      26,
+              label:      p.name,
+            }));
+          }
+        }
+
+        // ── שלב 4: DALL-E שרטוט קווי ─────────────────
+        L("🟡 [4] DALL-E שרטוט...");
+        send({ type: "step", step: 4 });
+
+        let imageUrl: string | null = null;
+
+        if (process.env.OPENAI_API_KEY) {
+          const railMap: Record<string, string> = {
+            "זכוכית": "glass panels railing",
+            "ברזל":   "iron vertical bars railing",
+            "בטון":   "solid concrete parapet",
+            "עץ":     "wooden railing",
+            "אין":    "open edge no railing",
+          };
+          const prompt =
+            `Clean architectural line drawing of a balcony viewed from inside. ` +
+            `${railMap[String(analysis.railing)] || "glass railing"}, ` +
+            `white tiled floor with grid, sliding glass door frames on sides. ` +
+            `Black thin lines on pure white background, no shading, no color, no fills. ` +
+            `Technical drawing style, frontal view, ${analysis.width_m}m wide.`;
+
+          try {
+            const ac  = new AbortController();
+            const tid = setTimeout(() => { ac.abort(); L("🔴 [4] timeout"); }, 50000);
+
+            const dr = await fetch("https://api.openai.com/v1/images/generations", {
+              method: "POST",
+              signal: ac.signal,
+              headers: {
+                Authorization:  `Bearer ${process.env.OPENAI_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model:   "gpt-image-2",
+                prompt,
+                n:       1,
+                size:    "1024x1024",
+                quality: "medium",
+              }),
+            });
+
+            clearTimeout(tid);
+            L(`🟢 [4] status: ${dr.status}`);
+            const dd = await dr.json();
+
+            if (dd.data?.[0]?.b64_json)  imageUrl = `data:image/png;base64,${dd.data[0].b64_json}`;
+            else if (dd.data?.[0]?.url)  imageUrl = dd.data[0].url;
+            else                         L(`🔴 [4] ${JSON.stringify(dd).substring(0, 120)}`);
+
+            if (imageUrl) L("🟢 [4] תמונה התקבלה!");
+          } catch (e: unknown) {
+            const isAbort = e instanceof Error && e.name === "AbortError";
+            L(`🔴 [4] ${isAbort ? "timeout" : (e instanceof Error ? e.message : "שגיאה")}`);
+          }
+        }
+
+        L(`✅ DONE | placements:${placements.length} | image:${imageUrl ? "יש" : "אין"}`);
+        send({ type: "done", analysis, placements, imageUrl, debug: { log } });
 
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "שגיאה לא ידועה";
-        return fail(msg);
+        L(`🔴 CATCH: ${msg}`);
+        send({ type: "error", message: "משהו השתבש, נסה שוב", debug: { log } });
       }
 
       ctrl.close();
@@ -205,34 +271,4 @@ export async function POST(req: NextRequest) {
       "Connection":    "keep-alive",
     },
   });
-}
-
-// ── בניית פרומפט ────────────────────────────────────
-function buildPrompt(analysis: Record<string, string>): string {
-  const styles: Record<string, string> = {
-    "ים-תיכוני":  "Mediterranean style with terracotta pots, lavender and rosemary",
-    "מודרני":     "modern minimalist with clean concrete planters",
-    "כפרי":       "rustic country style with wooden planters and wildflowers",
-    "מינימליסטי": "clean minimalist with simple white ceramic pots",
-    "בוהו":       "boho natural with hanging plants and mixed textures",
-  };
-  const suns: Record<string, string> = {
-    "שמש מלאה": "bathed in bright Mediterranean sunlight",
-    "חצי צל":   "with warm dappled light and partial shade",
-    "צל":       "in cool pleasant shade with lush shade-loving plants",
-  };
-  const sizes: Record<string, string> = {
-    "קטנה":    "small cozy intimate",
-    "בינונית": "medium comfortable",
-    "גדולה":   "large spacious",
-  };
-
-  return (
-    `A beautiful ${sizes[analysis.balcony_size] ?? "medium"} balcony garden ` +
-    `${suns[analysis.sun_exposure] ?? "in natural light"}, ` +
-    `${styles[analysis.style] ?? styles["ים-תיכוני"]}, ` +
-    `lush flowering plants, vibrant greenery, ` +
-    `${analysis.railing ?? "iron"} railing, realistic photography, ` +
-    `golden hour lighting, Israeli urban architecture, photorealistic`
-  );
 }
