@@ -116,10 +116,30 @@ export async function POST(req: NextRequest) {
           const auth   = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
           const prefix = `Nurseries/${nursery}`;
           try {
-            const catRes  = await fetch(
-              `https://api.cloudinary.com/v1_1/${cloudName}/resources/image?prefix=${prefix}&type=upload&max_results=50`,
-              { headers: { Authorization: `Basic ${auth}` } }
-            );
+            const catRes = await fetch(
+  `https://api.cloudinary.com/v1_1/${cloudName}/resources/search`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      expression: `folder:Nurseries/${nursery}/*`,
+      max_results: 50,
+    }),
+  }
+);
+const catData = await catRes.json();
+catalog = (catData.resources || []).map((r: {
+  public_id: string; secure_url: string; width: number; height: number;
+}) => {
+  const parts  = r.public_id.split("/");
+  const folder = parts[parts.length - 2] || "combinations";
+  const name   = (parts[parts.length - 1] || "").replace(/[-_]/g, " ");
+  return { id: r.public_id, name, url: r.secure_url, width: r.width, height: r.height, folder };
+});
+L(`🟢 [2] ${catalog.length} מוצרים נמצאו`);
             const catData = await catRes.json();
             catalog = (catData.resources || []).map((r: { public_id: string; secure_url: string; width: number; height: number }) => {
               const parts  = r.public_id.split("/");
