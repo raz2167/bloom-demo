@@ -112,7 +112,14 @@ export async function POST(req: NextRequest) {
             L("[2] " + catalog.length + " items");
           } catch(e) { L("[2] err: "+e); }
         }
-
+const bgImages = allItems.filter(i => i.folder === "Demo Balcony" || i.folder === "Demo_Balcony");
+const products = allItems.filter(i => i.folder !== "Demo Balcony" && i.folder !== "Demo_Balcony");
+let imageUrl: string | null = null;
+if (bgImages.length > 0) {
+  const empty = bgImages.find(i => !i.name.includes("צמחייה"));
+  imageUrl = (empty || bgImages[0]).url;
+}
+const catalog = products;
         send({ type: "step", step: 3 });
         let placements: PlacedProduct[] = [];
 
@@ -133,7 +140,7 @@ export async function POST(req: NextRequest) {
         }
 
         send({ type: "step", step: 4 });
-        const imageUrl: string|null = null;
+        // imageUrl כבר הוגדר למעלה
         L("DONE placements:" + placements.length);
         send({ type: "done", analysis, placements, imageUrl, debug: { log } });
 
