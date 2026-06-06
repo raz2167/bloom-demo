@@ -210,88 +210,8 @@ export async function POST(req: NextRequest) {
     }
   ]
 }
-
-חוקים: 3-5 מוצרים, אל תחפוף, y בין 45-80.`,
-              }],
-            });
-
-            const pRaw   = pm.content[0].type === "text" ? pm.content[0].text.trim() : "{}";
-            const pJson  = pRaw.replace(/```json|```/g, "").trim();
-            const parsed = JSON.parse(pJson);
-            placements   = Array.isArray(parsed.placements) ? parsed.placements : [];
-            L(`🟢 [3] ${placements.length} מיקומים`);
-          } catch (e) {
-            L(`🔴 [3] כשל: ${e} — fallback`);
-            placements = catalog.slice(0, 3).map((p, i) => ({
-              productId:  p.id,
-              productUrl: p.url,
-              name:       p.name,
-              x:          8 + i * 30,
-              y:          60,
-              width:      26,
-              label:      p.name,
-            }));
-          }
-        }
-
-        // ── שלב 4: DALL-E ─────────────────────────────
-        L("🟡 [4] DALL-E...");
-        send({ type: "step", step: 4 });
-
-        let imageUrl: string | null = null;
-
-        if (process.env.OPENAI_API_KEY) {
-          const railMap: Record<string, string> = {
-            "זכוכית": "glass panels railing",
-            "ברזל":   "iron vertical bars railing",
-            "בטון":   "solid concrete parapet",
-            "עץ":     "wooden railing",
-            "אין":    "open edge",
-          };
-          const prompt =
-            `Clean architectural line drawing of a balcony viewed from inside. ` +
-            `${railMap[String(analysis.railing)] || "glass railing"}, ` +
-            `white tiled floor with grid, glass door frames on sides. ` +
-            `Black thin lines on pure white background, no shading, no color. ` +
-            `Technical drawing style, frontal view, ${analysis.width_m}m wide.`;
-
-          try {
-            const ac  = new AbortController();
-            const tid = setTimeout(() => { ac.abort(); L("🔴 [4] timeout"); }, 50000);
-
-            const dr = await fetch("https://api.openai.com/v1/images/generations", {
-              method: "POST",
-              signal: ac.signal,
-              headers: {
-                Authorization:  `Bearer ${process.env.OPENAI_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model: "gpt-image-2", prompt, n: 1,
-                size: "1024x1024", quality: "medium",
-              }),
-            });
-
-            clearTimeout(tid);
-            L(`🟢 [4] status: ${dr.status}`);
-            const dd = await dr.json();
-
-            if (dd.data?.[0]?.b64_json) {
-              imageUrl = `data:image/png;base64,${dd.data[0].b64_json}`;
-              L("🟢 [4] תמונה!");
-            } else if (dd.data?.[0]?.url) {
-              imageUrl = dd.data[0].url;
-              L("🟢 [4] URL!");
-            } else {
-              L(`🔴 [4] ${JSON.stringify(dd).substring(0, 120)}`);
-            }
-          } catch (e: unknown) {
-            const isAbort = e instanceof Error && e.name === "AbortError";
-            L(`🔴 [4] ${isAbort ? "timeout" : (e instanceof Error ? e.message : "שגיאה")}`);
-          }
-        }
-
-        L(`✅ DONE | placements:${placements.length} | image:${imageUrl ? "יש" : "אין"}`);
+const imageUrl: string | null = null;
+        L(`✅ DONE | placements:${placements.length}`);
         send({ type: "done", analysis, placements, imageUrl, debug: { log } });
 
       } catch (err: unknown) {
@@ -311,4 +231,6 @@ export async function POST(req: NextRequest) {
       "Connection":    "keep-alive",
     },
   });
+}
+       
 }
