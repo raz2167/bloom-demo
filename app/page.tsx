@@ -3,7 +3,7 @@
 
 import { useState, useRef } from "react";
 
-type AppState = "idle" | "analyzing" | "confirm" | "details" | "waiting" | "error";
+type AppState = "idle" | "analyzing" | "confirm" | "details" | "waiting" | "blueprint" | "error";
 
 interface Analysis {
   balcony_size?:  string;
@@ -481,6 +481,7 @@ export default function Home() {
     width_m: 4, depth_m: 2.5, direction: "", sun_pct: 50,
     has_drain: null, has_power: null, garden_style: "",
   });
+  const [blueprintUrl, setBlueprintUrl] = useState<string | null>(null);
 
   // Blueprint מתקדם ברקע — שומרים את ה-Promise
   const blueprintPromiseRef = useRef<Promise<string | null> | null>(null);
@@ -564,25 +565,20 @@ export default function Home() {
 
   // כשהמשתמש מסיים את מסך הפרטים
   const handleDetailsComplete = async () => {
-    // בודקים אם ה-blueprint מוכן
-    const blueprintUrl = await Promise.race([
+    const url = await Promise.race([
       blueprintPromiseRef.current ?? Promise.resolve(null),
-      new Promise<null>(r => setTimeout(() => r(null), 100)), // timeout מהיר לבדיקה
+      new Promise<null>(r => setTimeout(() => r(null), 100)),
     ]);
 
-    if (blueprintUrl) {
-      // blueprint מוכן — נמשיך לשלב הבא (compose) עם ה-URL
-      console.log("blueprint ready:", blueprintUrl);
-      alert("blueprint מוכן! 🎉\n" + blueprintUrl.substring(0, 80) + "...\n\nהשלב הבא: compose");
+    if (url) {
+      setBlueprintUrl(url);
+      setState("blueprint");
     } else {
-      // blueprint עדיין בעיבוד — מציגים waiting screen
       setState("waiting");
-      // ממתינים לסיום
-      const url = await blueprintPromiseRef.current;
-      if (url) {
-        console.log("blueprint arrived:", url);
-        alert("blueprint הגיע! 🌿\n" + url.substring(0, 80) + "...\n\nהשלב הבא: compose");
-        setState("idle"); // placeholder — יוחלף ב-compose screen
+      const arrived = await blueprintPromiseRef.current;
+      if (arrived) {
+        setBlueprintUrl(arrived);
+        setState("blueprint");
       } else {
         setErrorMsg("לא הצלחנו ליצור את השרטוט, נסה שוב");
         setState("error");
@@ -596,12 +592,41 @@ export default function Home() {
     setPhotoDataUrl(null);
     setErrorMsg("");
     blueprintPromiseRef.current = null;
+    setBlueprintUrl(null);
     setUserData({ width_m: 4, depth_m: 2.5, direction: "", sun_pct: 50, has_drain: null, has_power: null, garden_style: "" });
     if (fileRef.current) fileRef.current.value = "";
   };
 
   if (state === "analyzing") return <LoadingScreen step={step} />;
   if (state === "waiting")   return <WaitingScreen />;
+
+  if (state === "blueprint" && blueprintUrl) {
+    return (
+      <div dir="rtl" style={{ background: "#FAF7F2", minHeight: "100vh", fontFamily: "sans-serif" }}>
+        <Header subtitle="שרטוט המרפסת" />
+        <div style={{ padding: "16px" }}>
+          <div style={{ marginBottom: "14px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.12)" }}>
+            <img src={blueprintUrl} alt="שרטוט המרפסת" style={{ width: "100%", display: "block" }} />
+          </div>
+          <div style={{
+            background: "#fff", borderRadius: "14px", padding: "16px", marginBottom: "12px",
+            boxShadow: "0 1px 0 rgba(139,125,107,0.1), 0 4px 16px rgba(26,23,20,0.04)",
+          }}>
+            <p style={{ margin: 0, color: "#8B7D6B", fontSize: "13px", lineHeight: "1.7", textAlign: "center" }}>
+              ✦ השרטוט מוכן — עכשיו נתכנן את הגינה שלך
+            </p>
+          </div>
+          <PrimaryButton label="בנה לי גינה ←" onClick={() => alert("השלב הבא: compose 🌿")} />
+          <div style={{ height: "12px" }} />
+          <button onClick={handleReset} style={{
+            width: "100%", padding: "14px", background: "transparent",
+            color: "#8B7D6B", border: "1px solid rgba(139,125,107,0.25)",
+            borderRadius: "12px", fontSize: "13px", cursor: "pointer", fontFamily: "sans-serif",
+          }}>← התחל מחדש</button>
+        </div>
+      </div>
+    );
+  }
 
   if (state === "confirm" && analysis && photoDataUrl) {
     return (
