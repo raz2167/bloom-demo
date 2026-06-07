@@ -3,7 +3,7 @@
 
 import { useState, useRef } from "react";
 
-type AppState = "idle" | "analyzing" | "confirm" | "details" | "error";
+type AppState = "idle" | "analyzing" | "confirm" | "details" | "waiting" | "error";
 
 interface Analysis {
   balcony_size?:  string;
@@ -58,12 +58,15 @@ function Header({ subtitle }: { subtitle: string }) {
   );
 }
 
-function PrimaryButton({ label, onClick }: { label: string; onClick: () => void }) {
+function PrimaryButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button onClick={onClick} style={{
-      width: "100%", padding: "17px", background: "#1A1714", color: "#FAF7F2",
+    <button onClick={onClick} disabled={disabled} style={{
+      width: "100%", padding: "17px",
+      background: disabled ? "#C4B8A8" : "#1A1714",
+      color: "#FAF7F2",
       border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: "600",
-      fontFamily: "sans-serif", cursor: "pointer",
+      fontFamily: "sans-serif", cursor: disabled ? "not-allowed" : "pointer",
+      transition: "background 0.2s",
     }}>
       {label}
     </button>
@@ -90,10 +93,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Slider({
-  label, value, min, max, step = 0.5, unit,
-  onChange,
-}: {
+function Slider({ label, value, min, max, step = 0.5, unit, onChange }: {
   label: string; value: number; min: number; max: number;
   step?: number; unit: string; onChange: (v: number) => void;
 }) {
@@ -101,15 +101,11 @@ function Slider({
     <div style={{ marginBottom: "16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
         <span style={{ fontSize: "13px", color: "#5C4A35" }}>{label}</span>
-        <span style={{ fontSize: "13px", fontWeight: "600", color: "#1A1714" }}>
-          {value} {unit}
-        </span>
+        <span style={{ fontSize: "13px", fontWeight: "600", color: "#1A1714" }}>{value} {unit}</span>
       </div>
-      <input
-        type="range" min={min} max={max} step={step} value={value}
+      <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(Number(e.target.value))}
-        style={{ width: "100%", accentColor: "#1A1714" }}
-      />
+        style={{ width: "100%", accentColor: "#1A1714" }} />
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
         <span style={{ fontSize: "10px", color: "#C4B8A8" }}>{min} {unit}</span>
         <span style={{ fontSize: "10px", color: "#C4B8A8" }}>{max} {unit}</span>
@@ -118,9 +114,7 @@ function Slider({
   );
 }
 
-function YesNo({
-  label, value, onChange,
-}: {
+function YesNo({ label, value, onChange }: {
   label: string; value: boolean | null; onChange: (v: boolean) => void;
 }) {
   const btn = (val: boolean, txt: string) => (
@@ -131,17 +125,12 @@ function YesNo({
       color: value === val ? "#FAF7F2" : "#8B7D6B",
       borderRadius: "10px", fontSize: "13px", cursor: "pointer",
       fontFamily: "sans-serif", fontWeight: value === val ? "600" : "400",
-    }}>
-      {txt}
-    </button>
+    }}>{txt}</button>
   );
   return (
     <div style={{ marginBottom: "14px" }}>
       <div style={{ fontSize: "13px", color: "#5C4A35", marginBottom: "8px" }}>{label}</div>
-      <div style={{ display: "flex", gap: "8px" }}>
-        {btn(true, "כן")}
-        {btn(false, "לא")}
-      </div>
+      <div style={{ display: "flex", gap: "8px" }}>{btn(true, "כן")}{btn(false, "לא")}</div>
     </div>
   );
 }
@@ -173,8 +162,7 @@ function LoadingScreen({ step }: { step: number }) {
           }} />
         ))}
         <div style={{
-          position: "absolute", inset: 0, display: "flex",
-          alignItems: "center", justifyContent: "center",
+          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "24px", animation: "breathe 2.5s ease-in-out infinite",
         }}>🌿</div>
       </div>
@@ -213,19 +201,75 @@ function LoadingScreen({ step }: { step: number }) {
   );
 }
 
+// ── Waiting screen (blueprint still processing) ───────
+function WaitingScreen() {
+  const steps = [
+    { label: "ניתוח הושלם",           done: true  },
+    { label: "מעצבים את השרטוט...",   done: false },
+    { label: "בניית תוכנית הגינה",    done: false },
+  ];
+  return (
+    <div dir="rtl" style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", minHeight: "100vh",
+      background: "radial-gradient(ellipse at 50% 40%, #2A3828 0%, #111 70%)",
+      padding: "40px 24px", fontFamily: "sans-serif",
+    }}>
+      <style>{`
+        @keyframes spin    { to { transform: rotate(360deg); } }
+        @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+      `}</style>
+      <div style={{ position: "relative", width: "90px", height: "90px", marginBottom: "36px" }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            position: "absolute", inset: `${i * 11}px`, borderRadius: "50%",
+            border: "2px solid transparent",
+            borderTopColor: `rgba(122,168,112,${0.9 - i * 0.25})`,
+            animation: `spin ${1.2 + i * 0.6}s linear infinite ${i % 2 ? "reverse" : ""}`,
+          }} />
+        ))}
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "24px", animation: "breathe 2.5s ease-in-out infinite",
+        }}>✦</div>
+      </div>
+      <h2 style={{ color: "#FAF8F5", fontSize: "18px", marginBottom: "8px", fontWeight: "200", textAlign: "center" }}>
+        המרפסת שלך בתכנון
+      </h2>
+      <p style={{ color: "rgba(250,248,245,0.35)", fontSize: "13px", marginBottom: "36px", textAlign: "center" }}>
+        עוד רגע קט והכל יהיה מוכן
+      </p>
+      <div style={{ width: "100%", maxWidth: "290px" }}>
+        {steps.map((s, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px",
+          }}>
+            <div style={{
+              width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: s.done ? "12px" : "14px",
+              background: s.done ? "#7AA870" : "transparent",
+              border: s.done ? "none" : "1.5px solid rgba(122,168,112,0.5)",
+              color: s.done ? "#1a3a18" : "white",
+              animation: !s.done && i === 1 ? "spin 1.5s linear infinite" : "none",
+              fontWeight: "700",
+            }}>
+              {s.done ? "✓" : i === 1 ? "↻" : "○"}
+            </div>
+            <span style={{ color: s.done ? "#7AA870" : i === 1 ? "#d0f0c8" : "#5a7258", fontSize: "13px" }}>
+              {s.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Screen 1: Confirm dimensions ──────────────────────
-function ConfirmScreen({
-  photoDataUrl,
-  analysis,
-  userData,
-  setUserData,
-  onNext,
-}: {
-  photoDataUrl: string;
-  analysis: Analysis;
-  userData: UserData;
-  setUserData: (u: UserData) => void;
-  onNext: () => void;
+function ConfirmScreen({ photoDataUrl, analysis, userData, setUserData, onNext }: {
+  photoDataUrl: string; analysis: Analysis;
+  userData: UserData; setUserData: (u: UserData) => void; onNext: () => void;
 }) {
   const SUN: Record<string, string> = { "שמש מלאה": "☀️", "חצי צל": "⛅", "צל": "🌑" };
   const tags = [
@@ -238,13 +282,9 @@ function ConfirmScreen({
     <div dir="rtl" style={{ background: "#FAF7F2", minHeight: "100vh", fontFamily: "sans-serif" }}>
       <Header subtitle="ניתוח מרפסת" />
       <div style={{ padding: "16px" }}>
-
-        {/* תמונה */}
         <div style={{ marginBottom: "14px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.12)" }}>
           <img src={photoDataUrl} alt="המרפסת שלך" style={{ width: "100%", display: "block" }} />
         </div>
-
-        {/* מה ראיתי */}
         {tags.length > 0 && (
           <Card>
             <SectionTitle>מה ראיתי</SectionTitle>
@@ -263,18 +303,12 @@ function ConfirmScreen({
             )}
           </Card>
         )}
-
-        {/* מידות */}
         <Card>
           <SectionTitle>מידות המרפסת — תקן אם צריך</SectionTitle>
-          <Slider
-            label="רוחב" value={userData.width_m} min={1} max={12} step={0.5} unit='מ׳'
-            onChange={v => setUserData({ ...userData, width_m: v })}
-          />
-          <Slider
-            label="עומק" value={userData.depth_m} min={0.5} max={6} step={0.5} unit='מ׳'
-            onChange={v => setUserData({ ...userData, depth_m: v })}
-          />
+          <Slider label="רוחב" value={userData.width_m} min={1} max={12} step={0.5} unit="מ׳"
+            onChange={v => setUserData({ ...userData, width_m: v })} />
+          <Slider label="עומק" value={userData.depth_m} min={0.5} max={6} step={0.5} unit="מ׳"
+            onChange={v => setUserData({ ...userData, depth_m: v })} />
           <div style={{
             background: "#F5F0E8", borderRadius: "10px", padding: "10px 14px",
             fontSize: "12px", color: "#8B7D6B", textAlign: "center",
@@ -284,7 +318,6 @@ function ConfirmScreen({
             </strong>
           </div>
         </Card>
-
         <PrimaryButton label="המשך ←" onClick={onNext} />
       </div>
     </div>
@@ -292,22 +325,15 @@ function ConfirmScreen({
 }
 
 // ── Screen 2: Garden details ──────────────────────────
-function DetailsScreen({
-  userData,
-  setUserData,
-  onNext,
-}: {
-  userData: UserData;
-  setUserData: (u: UserData) => void;
-  onNext: () => void;
+function DetailsScreen({ userData, setUserData, onNext }: {
+  userData: UserData; setUserData: (u: UserData) => void; onNext: () => void;
 }) {
   const DIRECTIONS = ["צפון", "דרום", "מזרח", "מערב"];
   const STYLES = [
-    { id: "modern",      emoji: "◻️", label: "מודרני",         desc: "נקי, גיאומטרי, מינימליסטי" },
+    { id: "modern",        emoji: "◻️", label: "מודרני",       desc: "נקי, גיאומטרי, מינימליסטי" },
     { id: "mediterranean", emoji: "🫙", label: "ים-תיכוני",    desc: "חם, צבעוני, ריחני" },
-    { id: "jungle",      emoji: "🌿", label: "טבעי-ג׳ונגל",   desc: "פראי, ירוק, טרופי" },
+    { id: "jungle",        emoji: "🌿", label: "טבעי-ג׳ונגל", desc: "פראי, ירוק, טרופי" },
   ];
-
   const canContinue =
     userData.direction !== "" &&
     userData.has_drain !== null &&
@@ -318,8 +344,6 @@ function DetailsScreen({
     <div dir="rtl" style={{ background: "#FAF7F2", minHeight: "100vh", fontFamily: "sans-serif" }}>
       <Header subtitle="פרטי הגינה" />
       <div style={{ padding: "16px" }}>
-
-        {/* כיוון */}
         <Card>
           <SectionTitle>לאיזה כיוון פונה המרפסת?</SectionTitle>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
@@ -331,22 +355,15 @@ function DetailsScreen({
                 color: userData.direction === d ? "#FAF7F2" : "#8B7D6B",
                 borderRadius: "10px", fontSize: "14px", cursor: "pointer",
                 fontFamily: "sans-serif", fontWeight: userData.direction === d ? "600" : "400",
-              }}>
-                {d}
-              </button>
+              }}>{d}</button>
             ))}
           </div>
         </Card>
-
-        {/* שמש */}
         <Card>
           <SectionTitle>כמה שמש מקבלת המרפסת?</SectionTitle>
-          <Slider
-            label="אחוז שמש ביום רגיל"
-            value={userData.sun_pct}
+          <Slider label="אחוז שמש ביום רגיל" value={userData.sun_pct}
             min={20} max={100} step={10} unit="%"
-            onChange={v => setUserData({ ...userData, sun_pct: v })}
-          />
+            onChange={v => setUserData({ ...userData, sun_pct: v })} />
           <div style={{
             background: "#F5F0E8", borderRadius: "10px", padding: "10px 14px",
             fontSize: "12px", color: "#8B7D6B", textAlign: "center",
@@ -358,22 +375,12 @@ function DetailsScreen({
               : "☀️ שמש מלאה — צמחי שמש ועמידי חום"}
           </div>
         </Card>
-
-        {/* ניקוז וחשמל */}
         <Card>
-          <YesNo
-            label="האם יש ניקוז במרפסת?"
-            value={userData.has_drain}
-            onChange={v => setUserData({ ...userData, has_drain: v })}
-          />
-          <YesNo
-            label="האם יש נקודת חשמל?"
-            value={userData.has_power}
-            onChange={v => setUserData({ ...userData, has_power: v })}
-          />
+          <YesNo label="האם יש ניקוז במרפסת?" value={userData.has_drain}
+            onChange={v => setUserData({ ...userData, has_drain: v })} />
+          <YesNo label="האם יש נקודת חשמל?" value={userData.has_power}
+            onChange={v => setUserData({ ...userData, has_power: v })} />
         </Card>
-
-        {/* סגנון */}
         <Card>
           <SectionTitle>איזה סגנון גינה אתה מחפש?</SectionTitle>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -387,41 +394,31 @@ function DetailsScreen({
               }}>
                 <span style={{ fontSize: "22px" }}>{s.emoji}</span>
                 <div>
-                  <div style={{
-                    fontSize: "14px", fontWeight: "600",
-                    color: userData.garden_style === s.id ? "#FAF7F2" : "#1A1714",
-                  }}>{s.label}</div>
-                  <div style={{
-                    fontSize: "11px", marginTop: "2px",
-                    color: userData.garden_style === s.id ? "rgba(250,247,242,0.55)" : "#8B7D6B",
-                  }}>{s.desc}</div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: userData.garden_style === s.id ? "#FAF7F2" : "#1A1714" }}>
+                    {s.label}
+                  </div>
+                  <div style={{ fontSize: "11px", marginTop: "2px", color: userData.garden_style === s.id ? "rgba(250,247,242,0.55)" : "#8B7D6B" }}>
+                    {s.desc}
+                  </div>
                 </div>
               </button>
             ))}
           </div>
         </Card>
-
-        <div style={{ opacity: canContinue ? 1 : 0.4, pointerEvents: canContinue ? "auto" : "none" }}>
-          <PrimaryButton label="המשך ←" onClick={onNext} />
-        </div>
+        <PrimaryButton label="המשך ←" onClick={onNext} disabled={!canContinue} />
         {!canContinue && (
           <p style={{ textAlign: "center", fontSize: "11px", color: "#C4B8A8", marginTop: "8px" }}>
             יש למלא את כל השדות להמשך
           </p>
         )}
-
       </div>
     </div>
   );
 }
 
 // ── Idle screen ───────────────────────────────────────
-function IdleScreen({
-  onFile, errorMsg, fileRef,
-}: {
-  onFile: (f: File) => void;
-  errorMsg: string;
-  fileRef: React.RefObject<HTMLInputElement>;
+function IdleScreen({ onFile, errorMsg, fileRef }: {
+  onFile: (f: File) => void; errorMsg: string; fileRef: React.RefObject<HTMLInputElement>;
 }) {
   return (
     <div dir="rtl" style={{
@@ -429,21 +426,14 @@ function IdleScreen({
       minHeight: "100vh", fontFamily: "sans-serif",
     }}>
       <div style={{ textAlign: "center", padding: "52px 24px 60px", color: "#FAF7F2" }}>
-        <div style={{ fontSize: "10px", letterSpacing: "4px", opacity: 0.35, marginBottom: "14px" }}>
-          H I B L O O M
-        </div>
+        <div style={{ fontSize: "10px", letterSpacing: "4px", opacity: 0.35, marginBottom: "14px" }}>H I B L O O M</div>
         <h1 style={{ margin: "0 0 10px", fontSize: "34px", fontWeight: "200", letterSpacing: "-1px", lineHeight: 1.1 }}>
           הגינה שתמיד<br />דמיינת
         </h1>
-        <p style={{ margin: 0, fontSize: "14px", opacity: 0.4, fontWeight: "300" }}>
-          צלם את המרפסת שלך
-        </p>
+        <p style={{ margin: 0, fontSize: "14px", opacity: 0.4, fontWeight: "300" }}>צלם את המרפסת שלך</p>
       </div>
       <div style={{ padding: "0 16px 32px" }}>
-        <div style={{
-          background: "#fff", borderRadius: "20px", padding: "28px 20px",
-          boxShadow: "0 8px 32px rgba(26,23,20,0.12)",
-        }}>
+        <div style={{ background: "#fff", borderRadius: "20px", padding: "28px 20px", boxShadow: "0 8px 32px rgba(26,23,20,0.12)" }}>
           {errorMsg && (
             <div style={{
               background: "#FEF2F2", border: "1px solid #FECACA",
@@ -457,12 +447,8 @@ function IdleScreen({
             background: "#FAF7F2", marginBottom: "24px",
           }}>
             <div style={{ fontSize: "40px", marginBottom: "12px" }}>📸</div>
-            <p style={{ margin: "0 0 5px", fontWeight: "600", color: "#1A1714", fontSize: "16px" }}>
-              צלם את המרפסת שלך
-            </p>
-            <p style={{ margin: 0, color: "#8B7D6B", fontSize: "13px" }}>
-              או לחץ לבחור תמונה מהגלריה
-            </p>
+            <p style={{ margin: "0 0 5px", fontWeight: "600", color: "#1A1714", fontSize: "16px" }}>צלם את המרפסת שלך</p>
+            <p style={{ margin: 0, color: "#8B7D6B", fontSize: "13px" }}>או לחץ לבחור תמונה מהגלריה</p>
           </div>
           <input ref={fileRef} type="file" accept="image/*" capture="environment"
             style={{ display: "none" }}
@@ -492,33 +478,47 @@ export default function Home() {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [errorMsg,     setErrorMsg]     = useState("");
   const [userData,     setUserData]     = useState<UserData>({
-    width_m: 4, depth_m: 2.5,
-    direction: "", sun_pct: 50,
-    has_drain: null, has_power: null,
-    garden_style: "",
+    width_m: 4, depth_m: 2.5, direction: "", sun_pct: 50,
+    has_drain: null, has_power: null, garden_style: "",
   });
+
+  // Blueprint מתקדם ברקע — שומרים את ה-Promise
+  const blueprintPromiseRef = useRef<Promise<string | null> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null!);
 
   const handleFile = async (file: File) => {
     setState("analyzing");
     setStep(0);
     setErrorMsg("");
+
     try {
       const dataUrl = await compressImage(file);
       setPhotoDataUrl(dataUrl);
-      const res = await fetch("/api/analyze", {
-        method: "POST",
+      const base64 = dataUrl.split(",")[1];
+      const mime   = file.type || "image/jpeg";
+
+      // ── Blueprint מתחיל ברקע מיד ──────────────────
+      blueprintPromiseRef.current = fetch("/api/blueprint", {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: dataUrl.split(",")[1],
-          mimeType: file.type || "image/jpeg",
-          nursery: "Bloom_Demo",
-        }),
+        body:    JSON.stringify({ imageBase64: base64, mimeType: mime }),
+      })
+        .then(r => r.json())
+        .then(d => (d.blueprintUrl as string) || null)
+        .catch(() => null);
+
+      // ── Claude Vision (SSE) ───────────────────────
+      const res = await fetch("/api/analyze", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ imageBase64: base64, mimeType: mime, nursery: "Bloom_Demo" }),
       });
       if (!res.body) throw new Error("אין תגובה מהשרת");
-      const reader = res.body.getReader();
+
+      const reader  = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      let buffer    = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -545,7 +545,11 @@ export default function Home() {
           } else if (event.type === "done") {
             const a = (event.analysis as Analysis) || null;
             setAnalysis(a);
-            if (a?.width_m) setUserData(prev => ({ ...prev, width_m: a.width_m!, depth_m: a.depth_m ?? prev.depth_m }));
+            if (a?.width_m) setUserData(prev => ({
+              ...prev,
+              width_m: a.width_m!,
+              depth_m: a.depth_m ?? prev.depth_m,
+            }));
             setState("confirm");
           } else if (event.type === "error") {
             throw new Error(event.message as string);
@@ -558,16 +562,46 @@ export default function Home() {
     }
   };
 
+  // כשהמשתמש מסיים את מסך הפרטים
+  const handleDetailsComplete = async () => {
+    // בודקים אם ה-blueprint מוכן
+    const blueprintUrl = await Promise.race([
+      blueprintPromiseRef.current ?? Promise.resolve(null),
+      new Promise<null>(r => setTimeout(() => r(null), 100)), // timeout מהיר לבדיקה
+    ]);
+
+    if (blueprintUrl) {
+      // blueprint מוכן — נמשיך לשלב הבא (compose) עם ה-URL
+      console.log("blueprint ready:", blueprintUrl);
+      alert("blueprint מוכן! 🎉\n" + blueprintUrl.substring(0, 80) + "...\n\nהשלב הבא: compose");
+    } else {
+      // blueprint עדיין בעיבוד — מציגים waiting screen
+      setState("waiting");
+      // ממתינים לסיום
+      const url = await blueprintPromiseRef.current;
+      if (url) {
+        console.log("blueprint arrived:", url);
+        alert("blueprint הגיע! 🌿\n" + url.substring(0, 80) + "...\n\nהשלב הבא: compose");
+        setState("idle"); // placeholder — יוחלף ב-compose screen
+      } else {
+        setErrorMsg("לא הצלחנו ליצור את השרטוט, נסה שוב");
+        setState("error");
+      }
+    }
+  };
+
   const handleReset = () => {
     setState("idle");
     setAnalysis(null);
     setPhotoDataUrl(null);
     setErrorMsg("");
+    blueprintPromiseRef.current = null;
     setUserData({ width_m: 4, depth_m: 2.5, direction: "", sun_pct: 50, has_drain: null, has_power: null, garden_style: "" });
     if (fileRef.current) fileRef.current.value = "";
   };
 
   if (state === "analyzing") return <LoadingScreen step={step} />;
+  if (state === "waiting")   return <WaitingScreen />;
 
   if (state === "confirm" && analysis && photoDataUrl) {
     return (
@@ -586,11 +620,7 @@ export default function Home() {
       <DetailsScreen
         userData={userData}
         setUserData={setUserData}
-        onNext={() => {
-          // userData מוכן — בשלב הבא נשתמש בו לבניית הגינה
-          console.log("userData ready:", userData);
-          alert("userData שמור! השלב הבא יבנה את הגינה 🌿\n\n" + JSON.stringify(userData, null, 2));
-        }}
+        onNext={handleDetailsComplete}
       />
     );
   }
