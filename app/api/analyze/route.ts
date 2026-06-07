@@ -10,20 +10,20 @@ const PRODUCTS = [
   {
     productId:  "adanit_1",
     name:       "אדנית 1 עם צמחייה",
-    productUrl: "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_1_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png",
+    productUrl: "https://res.cloudinary.com/dvt1kqbjq/image/upload/v1780739075/%D7%90%D7%93%D7%A0%D7%99%D7%AA_1_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94_qt2ukz.png",
     label: "אדנית מלבנית · 60 ס\u05f4מ",
   },
   {
     productId:  "adanit_2",
     name:       "אדנית 2 עם צמחייה",
-    productUrl: "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_2_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png",
+    productUrl: "https://res.cloudinary.com/dvt1kqbjq/image/upload/v1780739075/%D7%90%D7%93%D7%A0%D7%99%D7%AA_2_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94_ganzd2.png",
     label: "אדנית מלבנית · 60 ס\u05f4מ",
   },
 ];
 
 // שרטוט ריק מ-Cloudinary (Demo Balcony)
 const BLUEPRINT_URL =
-  "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/Demo%20Balcony/%D7%9E%D7%A8%D7%A4%D7%A1%D7%AA_%D7%9E%D7%90%D7%95%D7%99%D7%99%D7%A8%D7%AA.png";
+  "https://res.cloudinary.com/dvt1kqbjq/image/upload/v1780739920/%D7%9E%D7%A8%D7%A4%D7%A1%D7%AA_%D7%9E%D7%90%D7%95%D7%99%D7%99%D7%A8%D7%AA_jisx2e.png";
 
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
