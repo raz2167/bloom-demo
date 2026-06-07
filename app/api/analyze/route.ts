@@ -97,7 +97,7 @@ async function generateBlueprint(imageBase64: string, mimeType: string, L: (m: s
   try {
     const fd = new FormData();
     fd.append("model", "gpt-image-2");
-    fd.append("image[]", new Blob([Buffer.from(imageBase64, "base64")], { type: mimeType }), "balcony.jpg");
+    fd.append("image[]", new Blob([new Uint8Array(Buffer.from(imageBase64, "base64"))], { type: mimeType }), "balcony.jpg");
     fd.append("prompt",
       "Convert this balcony photo into a clean architectural line drawing. " +
       "Keep exact same perspective, dimensions, floor tiles, railing, walls and door frames. " +
