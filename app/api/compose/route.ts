@@ -43,9 +43,9 @@ export async function POST(req: NextRequest) {
     L("[3] שולח ל-DALL-E edits...");
     const fd = new FormData();
     fd.append("model", "gpt-image-2");
-    fd.append("image[]", new Blob([bpBuf],  { type:"image/png" }), "blueprint.png");
-    fd.append("image[]", new Blob([c1Buf],  { type:"image/png" }), "combination1.png");
-    fd.append("image[]", new Blob([c2Buf],  { type:"image/png" }), "combination2.png");
+    fd.append("image[]", new Blob([new Uint8Array(bpBuf)],  { type:"image/png" }), "blueprint.png");
+fd.append("image[]", new Blob([new Uint8Array(c1Buf)],  { type:"image/png" }), "combination1.png");
+fd.append("image[]", new Blob([new Uint8Array(c2Buf)],  { type:"image/png" }), "combination2.png");
     fd.append("prompt", prompt);
     fd.append("n", "1");
     fd.append("size", "1024x1024");
