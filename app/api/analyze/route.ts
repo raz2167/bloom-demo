@@ -1,10 +1,29 @@
 // app/api/analyze/route.ts
-// Claude Vision + DALL-E blueprint במקביל
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// קטלוג קשיח — 2 אדניות 60 ס"מ
+const PRODUCTS = [
+  {
+    productId:  "adanit_1",
+    name:       "אדנית 1 עם צמחייה",
+    productUrl: "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_1_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png",
+    label: "אדנית מלבנית · 60 ס\u05f4מ",
+  },
+  {
+    productId:  "adanit_2",
+    name:       "אדנית 2 עם צמחייה",
+    productUrl: "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_2_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png",
+    label: "אדנית מלבנית · 60 ס\u05f4מ",
+  },
+];
+
+// שרטוט ריק מ-Cloudinary (Demo Balcony)
+const BLUEPRINT_URL =
+  "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/Demo%20Balcony/%D7%9E%D7%A8%D7%A4%D7%A1%D7%AA_%D7%9E%D7%90%D7%95%D7%99%D7%99%D7%A8%D7%AA.png";
 
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
@@ -14,9 +33,13 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream({
     async start(ctrl) {
-      const send = (d: object) => ctrl.enqueue(encoder.encode("data: " + JSON.stringify(d) + "\n\n"));
+      const send = (d: object) =>
+        ctrl.enqueue(encoder.encode("data: " + JSON.stringify(d) + "\n\n"));
       const L = (m: string) => { console.log(m); log.push(m); };
-      const fail = (m: string) => { send({ type: "error", message: m, debug: { log } }); ctrl.close(); };
+      const fail = (m: string) => {
+        send({ type: "error", message: m, debug: { log } });
+        ctrl.close();
+      };
 
       try {
         if (!imageBase64) return fail("לא התקבלה תמונה");
@@ -25,125 +48,98 @@ export async function POST(req: NextRequest) {
         L("[0] " + Math.round(imageBase64.length / 1024) + "KB");
         send({ type: "step", step: 0 });
 
-        // הרץ Claude ו-DALL-E במקביל
-        const analysisPromise  = runClaudeAnalysis(imageBase64, mimeType, L);
-        const blueprintPromise = generateBlueprint(imageBase64, mimeType, L);
+        // ── שלב 1: Claude Vision ──────────────────────
+        let analysis: Record<string, string | number> = {
+          width_m: 4.0, depth_m: 2.5, balcony_size: "בינונית",
+          sun_exposure: "חצי צל", style: "מודרני", railing: "זכוכית", notes: "",
+        };
 
-        // Claude מהיר יותר - שלח ניתוח ברגע שמוכן
-        let analysis: Record<string, string|number>;
-        try {
-          analysis = await analysisPromise;
-          L("[A] ניתוח הושלם");
-          send({ type: "step", step: 1, analysis });
-        } catch (e) {
-          return fail("השירות עמוס - נסה שוב: " + e);
+        for (let a = 1; a <= 3; a++) {
+          try {
+            const msg = await anthropic.messages.create({
+              model: "claude-sonnet-4-6",
+              max_tokens: 700,
+              messages: [{
+                role: "user",
+                content: [
+                  {
+                    type: "image",
+                    source: {
+                      type: "base64",
+                      media_type: mimeType as "image/jpeg" | "image/png" | "image/webp",
+                      data: imageBase64,
+                    },
+                  },
+                  {
+                    type: "text",
+                    text: "נתח מרפסת, החזר JSON בלבד:\n" +
+                      "{\"balcony_size\":\"קטנה|בינונית|גדולה\"," +
+                      "\"width_m\":4.0,\"depth_m\":2.5," +
+                      "\"sun_direction\":\"מזרח|מערב|דרום|צפון\"," +
+                      "\"sun_exposure\":\"שמש מלאה|חצי צל|צל\"," +
+                      "\"railing\":\"זכוכית|ברזל|בטון|עץ|אין\"," +
+                      "\"style\":\"מודרני|ים-תיכוני|כפרי|מינימליסטי\"," +
+                      "\"notes\":\"הערה קצרה\"}",
+                  },
+                ],
+              }],
+            });
+            const raw =
+              msg.content[0].type === "text" ? msg.content[0].text.trim() : "{}";
+            const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+            if (!parsed.width_m) parsed.width_m = 4.0;
+            if (!parsed.depth_m) parsed.depth_m = 2.5;
+            analysis = parsed;
+            L("[1] " + JSON.stringify(analysis));
+            break;
+          } catch (e: unknown) {
+            L("[1] ניסיון " + a + " נכשל: " + e);
+            if (a === 3) {
+              L("[1] ממשיך עם ברירות מחדל");
+            } else {
+              await new Promise(r => setTimeout(r, 2000 * a));
+            }
+          }
         }
 
-        // המתן ל-DALL-E blueprint
-        send({ type: "step", step: 2 });
-        let blueprintUrl: string | null = null;
-        try {
-          blueprintUrl = await blueprintPromise;
-          L("[B] blueprint: " + (blueprintUrl ? "יש" : "אין"));
-        } catch (e) {
-          L("[B] כשל: " + e);
-        }
+        send({ type: "step", step: 1, analysis });
 
-        send({ type: "done", analysis, blueprintUrl, debug: { log } });
+        // ── שלב 2: מיקום 2 האדניות ───────────────────
+        const width = Number(analysis.width_m) || 4.0;
+        // אדנית 60 ס"מ = 0.6 מ' מתוך width מ'
+        const pct    = Math.round((0.6 / width) * 100);
+        const margin = Math.max(4, Math.round(((width - 1.2) / width) * 100 / 3));
+
+        const placements = [
+          { ...PRODUCTS[0], x: margin,                     y: 52, width: pct },
+          { ...PRODUCTS[1], x: 100 - margin - pct, y: 52, width: pct },
+        ];
+
+        L("[2] x1=" + placements[0].x + "% x2=" + placements[1].x + "% w=" + pct + "%");
+
+        send({
+          type: "done",
+          analysis,
+          placements,
+          imageUrl: BLUEPRINT_URL,
+          debug: { log },
+        });
 
       } catch (err: unknown) {
         const m = err instanceof Error ? err.message : "שגיאה";
         L("CATCH: " + m);
         send({ type: "error", message: "משהו השתבש, נסה שוב", debug: { log } });
       }
+
       ctrl.close();
     },
   });
 
   return new Response(stream, {
-    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" },
+    headers: {
+      "Content-Type":  "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection":    "keep-alive",
+    },
   });
-}
-
-async function runClaudeAnalysis(imageBase64: string, mimeType: string, L: (m: string) => void): Promise<Record<string, string|number>> {
-  L("[A] שולח ל-Claude...");
-  for (let a = 1; a <= 3; a++) {
-    try {
-      const msg = await anthropic.messages.create({
-        model: "claude-sonnet-4-6", max_tokens: 700,
-        messages: [{ role: "user", content: [
-          { type: "image", source: { type: "base64", media_type: mimeType as "image/jpeg"|"image/png"|"image/webp", data: imageBase64 } },
-          { type: "text", text: "נתח מרפסת, החזר JSON בלבד:\n{\"balcony_size\":\"קטנה|בינונית|גדולה\",\"width_m\":4.0,\"depth_m\":2.5,\"height_m\":1.1,\"sun_direction\":\"מזרח|מערב|דרום|צפון\",\"sun_exposure\":\"שמש מלאה|חצי צל|צל\",\"railing\":\"זכוכית|ברזל|בטון|עץ|אין\",\"style\":\"מודרני|ים-תיכוני|כפרי|מינימליסטי\",\"notes\":\"הערה קצרה\"}" },
-        ]}],
-      });
-      const raw = msg.content[0].type === "text" ? msg.content[0].text.trim() : "{}";
-      const analysis = JSON.parse(raw.replace(/```json|```/g, "").trim());
-      if (!analysis.width_m) analysis.width_m = 4.0;
-      if (!analysis.depth_m) analysis.depth_m = 2.5;
-      L("[A] " + JSON.stringify(analysis));
-      return analysis;
-    } catch (e: unknown) {
-      L("[A] ניסיון " + a + " נכשל");
-      if (a === 3) throw e;
-      await new Promise(r => setTimeout(r, 2000 * a));
-    }
-  }
-  throw new Error("Claude לא הגיב");
-}
-
-async function generateBlueprint(imageBase64: string, mimeType: string, L: (m: string) => void): Promise<string | null> {
-  if (!process.env.OPENAI_API_KEY) { L("[B] אין OPENAI_API_KEY"); return null; }
-  L("[B] שולח ל-DALL-E edits...");
-  try {
-    const fd = new FormData();
-    fd.append("model", "gpt-image-2");
-    fd.append("image[]", new Blob([new Uint8Array(Buffer.from(imageBase64, "base64"))], { type: mimeType }), "balcony.jpg");
-    fd.append("prompt",
-      "Convert this balcony photo into a clean architectural line drawing. " +
-      "Keep exact same perspective, dimensions, floor tiles, railing, walls and door frames. " +
-      "Black thin precise lines on pure white background. No shading, no color, no shadows. " +
-      "Technical drawing style. Empty balcony, no plants, no furniture."
-    );
-    fd.append("n", "1");
-    fd.append("size", "1024x1024");
-
-    const res = await fetch("https://api.openai.com/v1/images/edits", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
-      body: fd,
-    });
-    L("[B] status: " + res.status);
-    const data = await res.json();
-    L("[B] " + JSON.stringify(data).substring(0, 200));
-
-    if (data.data?.[0]?.url) return data.data[0].url;
-    if (data.data?.[0]?.b64_json) return await saveToCloudinary(data.data[0].b64_json, L);
-    return null;
-  } catch (e) {
-    L("[B] שגיאה: " + e);
-    return null;
-  }
-}
-
-async function saveToCloudinary(b64: string, L: (m: string) => void): Promise<string | null> {
-  const cn = process.env.CLOUDINARY_CLOUD_NAME;
-  const ak = process.env.CLOUDINARY_API_KEY;
-  const as = process.env.CLOUDINARY_API_SECRET;
-  if (!cn || !ak || !as) return null;
-  try {
-    const body = new URLSearchParams();
-    body.append("file", "data:image/png;base64," + b64);
-    body.append("folder", "blueprints");
-    const res = await fetch("https://api.cloudinary.com/v1_1/" + cn + "/image/upload", {
-      method: "POST",
-      headers: { Authorization: "Basic " + Buffer.from(ak + ":" + as).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-    const data = await res.json();
-    L("[C] " + (data.secure_url ? "שמור ב-Cloudinary" : JSON.stringify(data).substring(0, 100)));
-    return data.secure_url || null;
-  } catch (e) {
-    L("[C] שגיאה: " + e);
-    return null;
-  }
 }
