@@ -18,8 +18,13 @@ export async function POST(req: NextRequest) {
     L("[1] " + bpBuf.length + " bytes");
 
     L("[2] טוען combinations...");
-    const combos = await fetchCombos(nursery, L);
-    if (!combos.length) return NextResponse.json({ error: "לא נמצאו combinations", debug:{log} }, { status:400 });
+    const combos: CI[] = [
+  { id: "adanit_1", name: "אדנית 1 עם צמחייה",
+    url: "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_1_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png" },
+  { id: "adanit_2", name: "אדנית 2 עם צמחייה",
+    url: "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_2_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png" },
+];
+L("[2] קטלוג מקודד: 2 מוצרים");
 
     const c1 = combos[0], c2 = combos[1] ?? combos[0];
     L("[2] " + c1.name + " + " + c2.name);
