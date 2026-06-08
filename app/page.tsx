@@ -1,7 +1,7 @@
 "use client";
 // app/page.tsx
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 type AppState = "idle" | "analyzing" | "confirm" | "details" | "waiting" | "blueprint" | "error";
 
@@ -202,12 +202,36 @@ function LoadingScreen({ step }: { step: number }) {
 }
 
 // ── Waiting screen (blueprint still processing) ───────
+const GARDEN_TIPS = [
+  { emoji: "🌿", text: "צמחים ירוקים מפחיתים מתח ומשפרים מצב רוח — מחקרים מראים ירידה של 37% ברמות קורטיזול" },
+  { emoji: "☀️", text: "מרפסת דרומית מקבלת שמש כל היום — מושלמת לעגבניות, תותים, ועשבי תיבול" },
+  { emoji: "💧", text: "השקיה בשעות הבוקר המוקדמות מפחיתה אידוי ב-40% לעומת השקיה בצהריים" },
+  { emoji: "🪴", text: "אדנית של 60 ס״מ יכולה להכיל עד 3 צמחים בינוניים — המפתח הוא ניקוז טוב בתחתית" },
+  { emoji: "🌸", text: "לבנדר, רוזמרין ומנטה עובדים מצוין על מרפסות ישראליות — עמידים לחום ומריחים נפלא" },
+  { emoji: "🌱", text: "צמחים טרופיים כמו מוּסָה ופילודנדרון מתאימים לצל חלקי ויוצרים תחושת ג׳ונגל עירוני" },
+  { emoji: "🏙️", text: "גינת מרפסת מוסיפה בממוצע 8% לערך הנכס — ומשפרת משמעותית את איכות החיים" },
+  { emoji: "🦋", text: "פרחי בר מקומיים מושכים פרפרים ודבורים — ומחייאים את המרפסת בצבע ותנועה" },
+  { emoji: "🌡️", text: "צמחייה על מרפסת מורידה את טמפרטורת האוויר הסמוך ב-3-5 מעלות בקיץ הישראלי" },
+  { emoji: "🫙", text: "שתילה בשכבות — צמחים גבוהים מאחור, נמוכים מלפנים — יוצרת עומק ויזואלי מרשים" },
+];
+
 function WaitingScreen() {
-  const steps = [
-    { label: "ניתוח הושלם",           done: true  },
-    { label: "מעצבים את השרטוט...",   done: false },
-    { label: "בניית תוכנית הגינה",    done: false },
-  ];
+  const [tipIndex,  setTipIndex]  = useState(0);
+  const [visible,   setVisible]   = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setTipIndex(i => (i + 1) % GARDEN_TIPS.length);
+        setVisible(true);
+      }, 400);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const tip = GARDEN_TIPS[tipIndex];
+
   return (
     <div dir="rtl" style={{
       display: "flex", flexDirection: "column", alignItems: "center",
@@ -218,8 +242,10 @@ function WaitingScreen() {
       <style>{`
         @keyframes spin    { to { transform: rotate(360deg); } }
         @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        @keyframes fadeIn  { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
       `}</style>
-      <div style={{ position: "relative", width: "90px", height: "90px", marginBottom: "36px" }}>
+
+      <div style={{ position: "relative", width: "90px", height: "90px", marginBottom: "28px" }}>
         {[0, 1, 2].map(i => (
           <div key={i} style={{
             position: "absolute", inset: `${i * 11}px`, borderRadius: "50%",
@@ -233,33 +259,42 @@ function WaitingScreen() {
           fontSize: "24px", animation: "breathe 2.5s ease-in-out infinite",
         }}>✦</div>
       </div>
-      <h2 style={{ color: "#FAF8F5", fontSize: "18px", marginBottom: "8px", fontWeight: "200", textAlign: "center" }}>
+
+      <h2 style={{ color: "#FAF8F5", fontSize: "18px", marginBottom: "4px", fontWeight: "200", textAlign: "center" }}>
         המרפסת שלך בתכנון
       </h2>
-      <p style={{ color: "rgba(250,248,245,0.35)", fontSize: "13px", marginBottom: "36px", textAlign: "center" }}>
+      <p style={{ color: "rgba(250,248,245,0.3)", fontSize: "12px", marginBottom: "36px", textAlign: "center" }}>
         עוד רגע קט והכל יהיה מוכן
       </p>
-      <div style={{ width: "100%", maxWidth: "290px" }}>
-        {steps.map((s, i) => (
+
+      {/* כרטיס תובנה */}
+      <div style={{
+        width: "100%", maxWidth: "320px",
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(122,168,112,0.2)",
+        borderRadius: "16px", padding: "20px",
+        animation: visible ? "fadeIn 0.4s ease forwards" : "none",
+        opacity: visible ? 1 : 0,
+        transition: "opacity 0.3s",
+        minHeight: "100px",
+      }}>
+        <div style={{ fontSize: "28px", marginBottom: "10px", textAlign: "center" }}>{tip.emoji}</div>
+        <p style={{
+          margin: 0, color: "rgba(250,248,245,0.8)", fontSize: "14px",
+          lineHeight: "1.7", textAlign: "center", fontWeight: "300",
+        }}>
+          {tip.text}
+        </p>
+      </div>
+
+      {/* dots */}
+      <div style={{ display: "flex", gap: "6px", marginTop: "20px" }}>
+        {GARDEN_TIPS.map((_, i) => (
           <div key={i} style={{
-            display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px",
-          }}>
-            <div style={{
-              width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: s.done ? "12px" : "14px",
-              background: s.done ? "#7AA870" : "transparent",
-              border: s.done ? "none" : "1.5px solid rgba(122,168,112,0.5)",
-              color: s.done ? "#1a3a18" : "white",
-              animation: !s.done && i === 1 ? "spin 1.5s linear infinite" : "none",
-              fontWeight: "700",
-            }}>
-              {s.done ? "✓" : i === 1 ? "↻" : "○"}
-            </div>
-            <span style={{ color: s.done ? "#7AA870" : i === 1 ? "#d0f0c8" : "#5a7258", fontSize: "13px" }}>
-              {s.label}
-            </span>
-          </div>
+            width: i === tipIndex ? "16px" : "6px", height: "6px",
+            borderRadius: "3px", transition: "all 0.3s",
+            background: i === tipIndex ? "#7AA870" : "rgba(122,168,112,0.25)",
+          }} />
         ))}
       </div>
     </div>
