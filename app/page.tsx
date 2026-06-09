@@ -337,8 +337,8 @@ function IdleScreen({ onFile, errorMsg, fileRef }: {
 }
 
 // ── Blueprint screen עם CSS overlay ──────────────────
-function BlueprintScreen({ blueprintUrl, photoDataUrl, onReset }: {
-  blueprintUrl: string; photoDataUrl: string; onReset: () => void;
+function BlueprintScreen({ blueprintUrl, photoDataUrl, confirmedWidth, confirmedDepth, onReset }: {
+  blueprintUrl: string; photoDataUrl: string; confirmedWidth: number; confirmedDepth: number; onReset: () => void;
 }) {
   const [placement,       setPlacement]       = useState<Placement | null>(null);
   const [combo1Url,       setCombo1Url]       = useState<string>("");
@@ -353,7 +353,7 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, onReset }: {
       const res  = await fetch("/api/place-planters", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ blueprintUrl }),
+        body:    JSON.stringify({ blueprintUrl, confirmedWidth, confirmedDepth }),
       });
       const data = await res.json();
       if (data.placement) {
@@ -547,7 +547,7 @@ export default function Home() {
   if (state === "waiting")   return <WaitingScreen />;
 
   if (state === "blueprint" && blueprintUrl && photoDataUrl) {
-    return <BlueprintScreen blueprintUrl={blueprintUrl} photoDataUrl={photoDataUrl} onReset={handleReset} />;
+    return <BlueprintScreen blueprintUrl={blueprintUrl} photoDataUrl={photoDataUrl} confirmedWidth={userData.width_m} confirmedDepth={userData.depth_m} onReset={handleReset} />;
   }
 
   if (state === "confirm" && analysis && photoDataUrl) {
