@@ -9,15 +9,18 @@ const COMBO_1_URL =
 const COMBO_2_URL =
   "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_2_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png";
 
-const PLANTER_WIDTH_M  = 0.60; // אדנית 60 ס״מ
-const PLANTER_HEIGHT_M = 0.35; // גובה אדנית כולל צמחייה ~35 ס״מ
+const PLANTER_WIDTH_M  = 0.60;
+const PLANTER_HEIGHT_M = 0.35;
 
 interface PlacementZone { x: number; y: number; width: number; height: number; }
-interface RailingInfo {
-  railingY: number;       // Y פיקסל של קו המעקה
-  imageWidth: number;
+
+interface ClaudeRailing {
+  railingY:  number;
+  floorY:    number;
+  imageWidth:  number;
   imageHeight: number;
-  floorY: number;         // Y פיקסל של הרצפה בקדמת הבלופרינט
+  planter1X: number;
+  planter2X: number;
 }
 
 async function dlUrl(url: string): Promise<Buffer> {
@@ -26,7 +29,7 @@ async function dlUrl(url: string): Promise<Buffer> {
   return Buffer.from(await r.arrayBuffer());
 }
 
-async function getRailingFromClaude(blueprintBase64: string): Promise<RailingInfo> {
+async function getRailingFromClaude(blueprintBase64: string): Promise<ClaudeRailing> {
   const client = new Anthropic();
 
   const prompt = `This is an architectural line drawing of a balcony.
@@ -69,7 +72,7 @@ Return ONLY valid JSON, no markdown:
     .join("");
 
   const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  return JSON.parse(clean) as ClaudeRailing;
 }
 
 export async function POST(req: NextRequest) {
@@ -79,9 +82,9 @@ export async function POST(req: NextRequest) {
   try {
     const {
       blueprintUrl,
-      confirmedWidth = 4.0,   // רוחב המרפסת במטרים
-      confirmedDepth = 2.5,   // עומק המרפסת במטרים
-    } = await req.json();
+      confirmedWidth = 4.0,
+      confirmedDepth = 2.5,
+    } = await req.json() as { blueprintUrl: string; confirmedWidth: number; confirmedDepth: number };
 
     if (!blueprintUrl)
       return NextResponse.json({ error: "חסר blueprintUrl", debug: { log } }, { status: 400 });
@@ -90,34 +93,24 @@ export async function POST(req: NextRequest) {
     const bpBuf = await dlUrl(blueprintUrl);
     L("[1] " + bpBuf.length + " bytes");
 
-    L("[2] שולח ל-Claude Vision לזיהוי מעקה...");
-    const blueprintBase64 = bpBuf.toString("base64");
-    const railing = await getRailingFromClaude(blueprintBase64);
+    L("[2] שולח ל-Claude Vision...");
+    const railing = await getRailingFromClaude(bpBuf.toString("base64"));
     L("[2] " + JSON.stringify(railing));
 
     const { imageWidth, imageHeight, railingY, floorY, planter1X, planter2X } = railing;
 
-    // ── חישוב גודל האדנית בפיקסלים לפי מידות אמיתיות ──
-    // פיקסלים לכל מטר אופקי (לפי רוחב התמונה = רוחב המרפסת)
-    const pxPerMeterH = imageWidth / confirmedWidth;
-
-    // פיקסלים לכל מטר אנכי (לפי עומק הנראה = מהמעקה לקדמת הרצפה)
+    const pxPerMeterH   = imageWidth / confirmedWidth;
     const visibleDepthPx = floorY - railingY;
-    const pxPerMeterV = visibleDepthPx / confirmedDepth;
+    const pxPerMeterV   = visibleDepthPx / confirmedDepth;
 
-    // גודל האדנית בפיקסלים
     const planterWidthPx  = Math.round(PLANTER_WIDTH_M  * pxPerMeterH);
     const planterHeightPx = Math.round(PLANTER_HEIGHT_M * pxPerMeterV);
 
-    L("[3] px/m אופקי: " + pxPerMeterH.toFixed(1) + " | px/m אנכי: " + pxPerMeterV.toFixed(1));
     L("[3] אדנית: " + planterWidthPx + "x" + planterHeightPx + " px");
 
-    // מיקום X של כל אדנית (מהאחוז שקיבלנו)
     const p1x = Math.round((planter1X / 100) * imageWidth);
     const p2x = Math.round((planter2X / 100) * imageWidth);
-
-    // Y — נמוך ממעקה בגובה האדנית (האדנית יושבת על הרצפה צמוד למעקה)
-    const planterY = Math.round(railingY - planterHeightPx * 0.1); // overlap קטן עם המעקה
+    const planterY = Math.round(railingY - planterHeightPx * 0.1);
 
     const planter1: PlacementZone = { x: p1x, y: planterY, width: planterWidthPx, height: planterHeightPx };
     const planter2: PlacementZone = { x: p2x, y: planterY, width: planterWidthPx, height: planterHeightPx };
