@@ -1,6 +1,5 @@
 // app/api/blueprint/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 
 export const maxDuration = 60;
 
@@ -36,29 +35,34 @@ export async function POST(req: NextRequest) {
     if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     debug: { log } }, { status: 400 });
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", debug: { log } }, { status: 500 });
 
-    L("[1] " + Math.round(imageBase64.length / 1024) + "KB — ממיר ל-PNG ריבועי 512x512");
+    L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
 
-    // dall-e-2 edits דורש PNG ריבועי עם alpha
     const imgBuffer = Buffer.from(imageBase64, "base64");
-    const pngBuffer = await sharp(imgBuffer)
-      .resize(512, 512, { fit: "cover", position: "centre" })
-      .png()
-      .toBuffer();
-
-    L("[2] PNG מוכן: " + pngBuffer.length + " bytes — שולח ל-DALL-E-2");
+    const ext       = mimeType === "image/png" ? "png" : "jpeg";
 
     const fd = new FormData();
-    fd.append("model",  "dall-e-2");
-    fd.append("image",  new Blob([new Uint8Array(pngBuffer)], { type: "image/png" }), "balcony.png");
-    fd.append("prompt", BLUEPRINT_PROMPT);
-    fd.append("n",      "1");
-    fd.append("size",   "512x512");
+    fd.append("model",   "gpt-image-2");
+    fd.append("image[]", new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), `balcony.${ext}`);
+    fd.append("prompt",  BLUEPRINT_PROMPT);
+    fd.append("n",       "1");
+    fd.append("size",    "1024x1024");
 
-    const dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
-      method:  "POST",
-      headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
-      body:    fd,
-    });
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 55000); // 55 שנ׳ — שניה לפני maxDuration
+
+    L("[2] שולח ל-gpt-image-2 עם timeout 55s...");
+
+    let dalleRes: Response;
+    try {
+      dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
+        method:  "POST",
+        headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
+        body:    fd,
+        signal:  controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     L("[3] DALL-E status: " + dalleRes.status);
     const dalleData = await dalleRes.json();
