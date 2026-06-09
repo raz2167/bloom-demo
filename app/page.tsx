@@ -28,11 +28,12 @@ interface UserData {
 
 interface PlacementZone { x: number; y: number; width: number; height: number; }
 interface Placement {
-  planter1: PlacementZone;
-  planter2: PlacementZone;
+  potLeft:   PlacementZone;
+  planter1:  PlacementZone;
+  planter2:  PlacementZone;
+  potRight:  PlacementZone;
   imageWidth: number;
   imageHeight: number;
-  reasoning: string;
 }
 
 async function compressImage(file: File): Promise<string> {
@@ -343,6 +344,7 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, confirmedWidth, confirmed
   const [placement,       setPlacement]       = useState<Placement | null>(null);
   const [combo1Url,       setCombo1Url]       = useState<string>("");
   const [combo2Url,       setCombo2Url]       = useState<string>("");
+  const [potUrl,          setPotUrl]          = useState<string>("");
   const [placingPlanters, setPlacingPlanters] = useState(false);
   const [placeError,      setPlaceError]      = useState("");
 
@@ -353,13 +355,14 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, confirmedWidth, confirmed
       const res  = await fetch("/api/place-planters", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ blueprintUrl, confirmedWidth, confirmedDepth }),
+        body:    JSON.stringify({ blueprintUrl }),
       });
       const data = await res.json();
       if (data.placement) {
         setPlacement(data.placement);
         setCombo1Url(data.combo1Url);
         setCombo2Url(data.combo2Url);
+        setPotUrl(data.potUrl ?? "");
       } else {
         setPlaceError(data.error || "שגיאה בחישוב המיקום");
       }
@@ -397,24 +400,10 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, confirmedWidth, confirmed
           <img src={blueprintUrl} alt="שרטוט המרפסת" style={{ width: "100%", display: "block" }} />
           {placement && (
             <>
-              <img
-                src={combo1Url}
-                alt="אדנית 1"
-                style={{
-                  position: "absolute",
-                  ...toPercent(placement.planter1, placement.imageWidth, placement.imageHeight),
-                  objectFit: "contain",
-                }}
-              />
-              <img
-                src={combo2Url}
-                alt="אדנית 2"
-                style={{
-                  position: "absolute",
-                  ...toPercent(placement.planter2, placement.imageWidth, placement.imageHeight),
-                  objectFit: "contain",
-                }}
-              />
+              <img src={potUrl}    alt="כד שמאל"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.potLeft,  placement.imageWidth, placement.imageHeight) }} />
+              <img src={combo1Url} alt="אדנית 1"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.planter1, placement.imageWidth, placement.imageHeight) }} />
+              <img src={combo2Url} alt="אדנית 2"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.planter2, placement.imageWidth, placement.imageHeight) }} />
+              <img src={potUrl}    alt="כד ימין"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.potRight, placement.imageWidth, placement.imageHeight) }} />
             </>
           )}
         </div>
