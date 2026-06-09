@@ -1,7 +1,8 @@
 // app/api/blueprint/route.ts
+// מקבל תמונת מרפסת → מחזיר שרטוט קווי אדריכלי נקי (DALL-E edits)
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 const BLUEPRINT_PROMPT = `
 You are editing a balcony photo. Follow these two steps in order:
@@ -32,54 +33,42 @@ export async function POST(req: NextRequest) {
   try {
     const { imageBase64, mimeType = "image/jpeg" } = await req.json();
 
-    if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     debug: { log } }, { status: 400 });
+    if (!imageBase64)              return NextResponse.json({ error: "חסרה תמונה",       debug: { log } }, { status: 400 });
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", debug: { log } }, { status: 500 });
 
     L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
 
+    // המרת base64 ל-Buffer
     const imgBuffer = Buffer.from(imageBase64, "base64");
     const ext       = mimeType === "image/png" ? "png" : "jpeg";
 
     const fd = new FormData();
-    fd.append("model",   "gpt-image-2");
+    fd.append("model",  "gpt-image-2");
     fd.append("image[]", new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), `balcony.${ext}`);
-    fd.append("prompt",  BLUEPRINT_PROMPT);
-    fd.append("n",       "1");
-    fd.append("size",    "1024x1024");
+    fd.append("prompt", BLUEPRINT_PROMPT);
+    fd.append("n",      "1");
+    fd.append("size",   "1024x1024");
 
-    const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 55000); // 55 שנ׳ — שניה לפני maxDuration
+    const dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
+      method:  "POST",
+      headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
+      body:    fd,
+    });
 
-    L("[2] שולח ל-gpt-image-2 עם timeout 55s...");
-
-    let dalleRes: Response;
-    try {
-      dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
-        method:  "POST",
-        headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
-        body:    fd,
-        signal:  controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    L("[3] DALL-E status: " + dalleRes.status);
+    L("[2] DALL-E status: " + dalleRes.status);
     const dalleData = await dalleRes.json();
-    L("[3] response: " + JSON.stringify(dalleData).substring(0, 300));
+    L("[2] " + JSON.stringify(dalleData).substring(0, 200));
 
     let blueprintUrl: string | null = null;
     if (dalleData.data?.[0]?.url)      blueprintUrl = dalleData.data[0].url;
     if (dalleData.data?.[0]?.b64_json) blueprintUrl = "data:image/png;base64," + dalleData.data[0].b64_json;
 
     if (!blueprintUrl) {
-      return NextResponse.json({
-        error: "DALL-E לא החזיר תמונה: " + JSON.stringify(dalleData).substring(0, 150),
-        debug: { log }
-      }, { status: 500 });
+      L("[2] שגיאה מ-DALL-E: " + JSON.stringify(dalleData).substring(0, 300));
+      return NextResponse.json({ error: "DALL-E לא החזיר תמונה", debug: { log } }, { status: 500 });
     }
 
-    L("[4] blueprint מוכן ✓");
+    L("[3] blueprint מוכן ✓");
     return NextResponse.json({ blueprintUrl, debug: { log } });
 
   } catch (err: unknown) {
