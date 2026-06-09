@@ -400,10 +400,10 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, confirmedWidth, confirmed
           <img src={blueprintUrl} alt="שרטוט המרפסת" style={{ width: "100%", display: "block" }} />
           {placement && (
             <>
-              <img src={potUrl}    alt="כד שמאל"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.potLeft,  placement.imageWidth, placement.imageHeight) }} />
-              <img src={combo1Url} alt="אדנית 1"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.planter1, placement.imageWidth, placement.imageHeight) }} />
-              <img src={combo2Url} alt="אדנית 2"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.planter2, placement.imageWidth, placement.imageHeight) }} />
-              <img src={potUrl}    alt="כד ימין"  style={{ position: "absolute", objectFit: "contain", ...toPercent(placement.potRight, placement.imageWidth, placement.imageHeight) }} />
+              <img src={potUrl}    alt="כד שמאל"  style={{ position: "absolute", objectFit: "fill", ...toPercent(placement.potLeft,  placement.imageWidth, placement.imageHeight) }} />
+              <img src={combo1Url} alt="אדנית 1"  style={{ position: "absolute", objectFit: "fill", ...toPercent(placement.planter1, placement.imageWidth, placement.imageHeight) }} />
+              <img src={combo2Url} alt="אדנית 2"  style={{ position: "absolute", objectFit: "fill", ...toPercent(placement.planter2, placement.imageWidth, placement.imageHeight) }} />
+              <img src={potUrl}    alt="כד ימין"  style={{ position: "absolute", objectFit: "fill", ...toPercent(placement.potRight, placement.imageWidth, placement.imageHeight) }} />
             </>
           )}
         </div>
