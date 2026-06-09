@@ -4,23 +4,26 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
 
-const COMBO_1_URL =
-  "https://res.cloudinary.com/dvt1kqbjq/image/upload/v1780739075/%D7%90%D7%93%D7%A0%D7%99%D7%AA_1_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94_qt2ukz.png";
-const COMBO_2_URL =
-  "https://res.cloudinary.com/dvt1kqbjq/image/upload/v1780739076/%D7%90%D7%93%D7%A0%D7%99%D7%AA_3_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94_n4014f.png";
+const COMBO_1_URL = "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_1_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png";
+const COMBO_2_URL = "https://res.cloudinary.com/dvt1kqbjq/image/upload/Nurseries/Bloom_Demo/combinations/%D7%90%D7%93%D7%A0%D7%99%D7%AA_2_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94.png";
+const POT_URL     = "https://res.cloudinary.com/dvt1kqbjq/image/upload/v1780739077/%D7%9B%D7%93_%D7%92%D7%91%D7%95%D7%94_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94_hbbgvb.png";
 
-const PLANTER_WIDTH_M  = 0.60;
-const PLANTER_HEIGHT_M = 0.35;
+// מידות קבועות — לא תלוי במה שהמשתמש הזין
+const FIXED_WIDTH_M  = 3.0;
+const FIXED_DEPTH_M  = 2.0;
 
-interface PlacementZone { x: number; y: number; width: number; height: number; }
+const PLANTER_W_M = 0.60;  // אדנית
+const PLANTER_H_M = 0.35;
+const POT_W_M     = 0.50;  // כד
+const POT_H_M     = 1.00;
+
+interface Zone { x: number; y: number; width: number; height: number; }
 
 interface ClaudeRailing {
-  railingY:  number;
-  floorY:    number;
+  railingY:   number;
+  floorY:     number;
   imageWidth:  number;
   imageHeight: number;
-  planter1X: number;
-  planter2X: number;
 }
 
 async function dlUrl(url: string): Promise<Buffer> {
@@ -34,29 +37,23 @@ async function getRailingFromClaude(blueprintBase64: string): Promise<ClaudeRail
 
   const prompt = `This is an architectural line drawing of a balcony.
 
-Identify the following pixel coordinates in the image:
-1. railingY: the Y coordinate (pixels from top) of the inner edge of the railing (where planters would sit)
-2. floorY: the Y coordinate of the floor at the very front/bottom of the balcony
+Identify these pixel coordinates:
+1. railingY: Y coordinate (px from top) of the inner edge of the railing — where planters would sit against it
+2. floorY: Y coordinate of the floor at the very front/bottom of the visible balcony
 3. imageWidth: total image width in pixels
 4. imageHeight: total image height in pixels
-
-Also estimate where along the railing (as X percentages) two planters should go:
-- planter1X: left edge of first planter as % of imageWidth (around 15-25%)
-- planter2X: left edge of second planter as % of imageWidth (around 55-65%)
 
 Return ONLY valid JSON, no markdown:
 {
   "railingY": <px>,
   "floorY": <px>,
   "imageWidth": <px>,
-  "imageHeight": <px>,
-  "planter1X": <percent 0-100>,
-  "planter2X": <percent 0-100>
+  "imageHeight": <px>
 }`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-5",
-    max_tokens: 300,
+    max_tokens: 200,
     messages: [{
       role: "user",
       content: [
@@ -71,8 +68,7 @@ Return ONLY valid JSON, no markdown:
     .map(b => (b as { type: "text"; text: string }).text)
     .join("");
 
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean) as ClaudeRailing;
+  return JSON.parse(text.replace(/```json|```/g, "").trim()) as ClaudeRailing;
 }
 
 export async function POST(req: NextRequest) {
@@ -80,11 +76,7 @@ export async function POST(req: NextRequest) {
   const L = (m: string) => { console.log(m); log.push(m); };
 
   try {
-    const {
-      blueprintUrl,
-      confirmedWidth = 4.0,
-      confirmedDepth = 2.5,
-    } = await req.json() as { blueprintUrl: string; confirmedWidth: number; confirmedDepth: number };
+    const { blueprintUrl } = await req.json() as { blueprintUrl: string };
 
     if (!blueprintUrl)
       return NextResponse.json({ error: "חסר blueprintUrl", debug: { log } }, { status: 400 });
@@ -97,31 +89,48 @@ export async function POST(req: NextRequest) {
     const railing = await getRailingFromClaude(bpBuf.toString("base64"));
     L("[2] " + JSON.stringify(railing));
 
-    const { imageWidth, imageHeight, railingY, floorY, planter1X, planter2X } = railing;
+    const { imageWidth, imageHeight, railingY, floorY } = railing;
 
-    const pxPerMeterH   = imageWidth / confirmedWidth;
+    // ── חישוב סקאלה לפי מידות קבועות ──────────────
+    const pxPerMeterH    = imageWidth  / FIXED_WIDTH_M;
     const visibleDepthPx = floorY - railingY;
-    const pxPerMeterV   = visibleDepthPx / confirmedDepth;
+    const pxPerMeterV    = visibleDepthPx / FIXED_DEPTH_M;
 
-    const planterWidthPx  = Math.round(PLANTER_WIDTH_M  * pxPerMeterH);
-    const planterHeightPx = Math.round(PLANTER_HEIGHT_M * pxPerMeterV);
+    const planterWpx = Math.round(PLANTER_W_M * pxPerMeterH);
+    const planterHpx = Math.round(PLANTER_H_M * pxPerMeterV);
+    const potWpx     = Math.round(POT_W_M     * pxPerMeterH);
+    const potHpx     = Math.round(POT_H_M     * pxPerMeterV);
 
-    L("[3] אדנית: " + planterWidthPx + "x" + planterHeightPx + " px");
+    L("[3] planter=" + planterWpx + "x" + planterHpx + "px  pot=" + potWpx + "x" + potHpx + "px");
 
-    const p1x = Math.round((planter1X / 100) * imageWidth);
-    const p2x = Math.round((planter2X / 100) * imageWidth);
-    const planterY = Math.round(railingY - planterHeightPx * 0.1);
+    // ── מיקום Y ─────────────────────────────────────
+    // כל האלמנטים יושבים על הרצפה צמוד למעקה — תחתית ב-railingY
+    const planterY = railingY - planterHpx;
+    const potY     = railingY - potHpx;
 
-    const planter1: PlacementZone = { x: p1x, y: planterY, width: planterWidthPx, height: planterHeightPx };
-    const planter2: PlacementZone = { x: p2x, y: planterY, width: planterWidthPx, height: planterHeightPx };
+    // ── מיקום X — פריסה: [כד][אדנית1][אדנית2][כד] ─
+    // רווח שווה בין האלמנטים
+    const totalElementsW = potWpx + planterWpx + planterWpx + potWpx;
+    const totalGap       = imageWidth - totalElementsW;
+    const gap            = Math.round(totalGap / 5); // 5 חללים: שמאל, בין כל אלמנט, ימין
 
-    L("[4] planter1: " + JSON.stringify(planter1));
-    L("[4] planter2: " + JSON.stringify(planter2));
+    const potLeftX     = gap;
+    const planter1X    = potLeftX  + potWpx     + gap;
+    const planter2X    = planter1X + planterWpx + gap;
+    const potRightX    = planter2X + planterWpx + gap;
+
+    L("[4] potL=" + potLeftX + " p1=" + planter1X + " p2=" + planter2X + " potR=" + potRightX);
+
+    const potLeft:   Zone = { x: potLeftX,  y: potY,     width: potWpx,     height: potHpx     };
+    const planter1:  Zone = { x: planter1X, y: planterY, width: planterWpx, height: planterHpx };
+    const planter2:  Zone = { x: planter2X, y: planterY, width: planterWpx, height: planterHpx };
+    const potRight:  Zone = { x: potRightX, y: potY,     width: potWpx,     height: potHpx     };
 
     return NextResponse.json({
-      placement: { planter1, planter2, imageWidth, imageHeight },
+      placement: { potLeft, planter1, planter2, potRight, imageWidth, imageHeight },
       combo1Url: COMBO_1_URL,
       combo2Url: COMBO_2_URL,
+      potUrl:    POT_URL,
       debug: { log },
     });
 
