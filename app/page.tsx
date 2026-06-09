@@ -273,6 +273,7 @@ function WaitingScreen() {
         עוד רגע קט והכל יהיה מוכן
       </p>
 
+      {/* כרטיס תובנה */}
       <div style={{
         width: "100%", maxWidth: "320px",
         background: "rgba(255,255,255,0.06)",
@@ -292,6 +293,7 @@ function WaitingScreen() {
         </p>
       </div>
 
+      {/* dots */}
       <div style={{ display: "flex", gap: "6px", marginTop: "20px" }}>
         {GARDEN_TIPS.map((_, i) => (
           <div key={i} style={{
@@ -511,19 +513,18 @@ function IdleScreen({ onFile, errorMsg, fileRef }: {
 
 // ── Main ──────────────────────────────────────────────
 export default function Home() {
-  const [state,           setState]           = useState<AppState>("idle");
-  const [step,            setStep]            = useState(0);
-  const [analysis,        setAnalysis]        = useState<Analysis | null>(null);
-  const [photoDataUrl,    setPhotoDataUrl]    = useState<string | null>(null);
-  const [errorMsg,        setErrorMsg]        = useState("");
-  const [userData,        setUserData]        = useState<UserData>({
+  const [state,        setState]        = useState<AppState>("idle");
+  const [step,         setStep]         = useState(0);
+  const [analysis,     setAnalysis]     = useState<Analysis | null>(null);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [errorMsg,     setErrorMsg]     = useState("");
+  const [userData,     setUserData]     = useState<UserData>({
     width_m: 4, depth_m: 2.5, direction: "", sun_pct: 50,
     has_drain: null, has_power: null, garden_style: "",
   });
-  const [blueprintUrl,    setBlueprintUrl]    = useState<string | null>(null);
-  const [placedUrl,       setPlacedUrl]       = useState<string | null>(null);
-  const [placingPlanters, setPlacingPlanters] = useState(false);
+  const [blueprintUrl, setBlueprintUrl] = useState<string | null>(null);
 
+  // Blueprint מתקדם ברקע — שומרים את ה-Promise
   const blueprintPromiseRef = useRef<Promise<string | null> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null!);
 
@@ -531,7 +532,6 @@ export default function Home() {
     setState("analyzing");
     setStep(0);
     setErrorMsg("");
-    setPlacedUrl(null);
 
     try {
       const dataUrl = await compressImage(file);
@@ -539,6 +539,7 @@ export default function Home() {
       const base64 = dataUrl.split(",")[1];
       const mime   = file.type || "image/jpeg";
 
+      // ── Blueprint מתחיל ברקע מיד ──────────────────
       blueprintPromiseRef.current = fetch("/api/blueprint", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -548,6 +549,7 @@ export default function Home() {
         .then(d => (d.blueprintUrl as string) || null)
         .catch(() => null);
 
+      // ── Claude Vision (SSE) ───────────────────────
       const res = await fetch("/api/analyze", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -602,6 +604,7 @@ export default function Home() {
     }
   };
 
+  // כשהמשתמש מסיים את מסך הפרטים
   const handleDetailsComplete = async () => {
     const url = await Promise.race([
       blueprintPromiseRef.current ?? Promise.resolve(null),
@@ -629,10 +632,8 @@ export default function Home() {
     setAnalysis(null);
     setPhotoDataUrl(null);
     setErrorMsg("");
-    setBlueprintUrl(null);
-    setPlacedUrl(null);
-    setPlacingPlanters(false);
     blueprintPromiseRef.current = null;
+    setBlueprintUrl(null);
     setUserData({ width_m: 4, depth_m: 2.5, direction: "", sun_pct: 50, has_drain: null, has_power: null, garden_style: "" });
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -645,68 +646,18 @@ export default function Home() {
       <div dir="rtl" style={{ background: "#FAF7F2", minHeight: "100vh", fontFamily: "sans-serif" }}>
         <Header subtitle="שרטוט המרפסת" />
         <div style={{ padding: "16px" }}>
-
-          {/* תמונה מקורית */}
-          <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#8B7D6B", fontWeight: "600", letterSpacing: "0.5px" }}>
-            המרפסת שלך
-          </p>
-          <div style={{ marginBottom: "16px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.12)" }}>
-            <img src={photoDataUrl!} alt="המרפסת המקורית" style={{ width: "100%", display: "block" }} />
-          </div>
-
-          {/* בלופרינט */}
-          <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#8B7D6B", fontWeight: "600", letterSpacing: "0.5px" }}>
-            השרטוט האדריכלי
-          </p>
           <div style={{ marginBottom: "14px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.12)" }}>
             <img src={blueprintUrl} alt="שרטוט המרפסת" style={{ width: "100%", display: "block" }} />
           </div>
-
-          {/* תמונה עם אדניות — מופיעה אחרי שהחישוב מסתיים */}
-          {placedUrl && (
-            <>
-              <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#8B7D6B", fontWeight: "600", letterSpacing: "0.5px" }}>
-                הצעת המיקום
-              </p>
-              <div style={{ marginBottom: "14px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.12)" }}>
-                <img src={placedUrl} alt="מיקום האדניות" style={{ width: "100%", display: "block" }} />
-              </div>
-            </>
-          )}
-
           <div style={{
             background: "#fff", borderRadius: "14px", padding: "16px", marginBottom: "12px",
             boxShadow: "0 1px 0 rgba(139,125,107,0.1), 0 4px 16px rgba(26,23,20,0.04)",
           }}>
             <p style={{ margin: 0, color: "#8B7D6B", fontSize: "13px", lineHeight: "1.7", textAlign: "center" }}>
-              {placedUrl
-                ? "✦ האדניות מוקמו — מוכן לשלב הבא"
-                : "✦ השרטוט מוכן — עכשיו נתכנן את הגינה שלך"}
+              ✦ השרטוט מוכן — עכשיו נתכנן את הגינה שלך
             </p>
           </div>
-
-          <PrimaryButton
-            label={placingPlanters ? "מחשב מיקום..." : placedUrl ? "המשך לשלב הבא ←" : "בנה לי גינה ←"}
-            disabled={placingPlanters}
-            onClick={async () => {
-              if (placedUrl) { alert("השלב הבא: compose 🌿"); return; }
-              setPlacingPlanters(true);
-              try {
-                const res = await fetch("/api/place-planters", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ blueprintUrl }),
-                });
-                const data = await res.json();
-                if (data.imageUrl) setPlacedUrl(data.imageUrl);
-                else console.error("place-planters error:", data.error);
-              } catch (e) {
-                console.error("place-planters fetch error:", e);
-              } finally {
-                setPlacingPlanters(false);
-              }
-            }}
-          />
+          <PrimaryButton label="בנה לי גינה ←" onClick={() => alert("השלב הבא: compose 🌿")} />
           <div style={{ height: "12px" }} />
           <button onClick={handleReset} style={{
             width: "100%", padding: "14px", background: "transparent",
