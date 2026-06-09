@@ -396,7 +396,7 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, confirmedWidth, confirmed
         <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#8B7D6B", fontWeight: "600" }}>
           {placement ? "הצעת מיקום האדניות" : "השרטוט האדריכלי"}
         </p>
-        <div style={{ marginBottom: "14px", borderRadius: "16px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.12)", position: "relative" }}>
+        <div style={{ marginBottom: "14px", borderRadius: "16px", overflow: "visible", boxShadow: "0 6px 24px rgba(0,0,0,0.12)", position: "relative" }}>
           <img src={blueprintUrl} alt="שרטוט המרפסת" style={{ width: "100%", display: "block" }} />
           {placement && (
             <>
