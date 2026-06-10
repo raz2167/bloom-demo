@@ -30,78 +30,48 @@ export async function POST(req: NextRequest) {
   const L = (m: string) => { console.log(m); log.push(m); };
 
   try {
-    L("[0] parsing request...");
-    const body = await req.json();
-    const imageBase64: string = body.imageBase64 ?? "";
-    const mimeType: string    = body.mimeType    ?? "image/jpeg";
-
-    L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
+    const { imageBase64, mimeType = "image/jpeg" } = await req.json();
 
     if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     debug: { log } }, { status: 400 });
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", debug: { log } }, { status: 500 });
 
-    L("[2] converting base64 to buffer...");
-    const imgBytes = Uint8Array.from(atob(imageBase64), c => c.charCodeAt(0));
-    const ext      = mimeType === "image/png" ? "png" : "jpeg";
-    L("[2] buffer size: " + imgBytes.length + " bytes");
+    L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
 
-    L("[3] building FormData...");
+    const imgBuffer = Buffer.from(imageBase64, "base64");
+    const ext       = mimeType === "image/png" ? "png" : "jpeg";
+
     const fd = new FormData();
     fd.append("model",   "gpt-image-2");
-    fd.append("image[]", new Blob([imgBytes], { type: mimeType }), `balcony.${ext}`);
+    fd.append("image[]", new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), `balcony.${ext}`);
     fd.append("prompt",  BLUEPRINT_PROMPT);
     fd.append("n",       "1");
     fd.append("size",    "1024x1024");
 
-    L("[4] sending to DALL-E...");
-    const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 55000);
+    const dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
+      method:  "POST",
+      headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
+      body:    fd,
+    });
 
-    let dalleRes: Response;
-    try {
-      dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
-        method:  "POST",
-        headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
-        body:    fd,
-        signal:  controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    L("[5] DALL-E status: " + dalleRes.status);
-
-    if (!dalleRes.ok) {
-      const errText = await dalleRes.text();
-      L("[5] error body: " + errText.substring(0, 300));
-      return NextResponse.json({ error: "DALL-E error " + dalleRes.status + ": " + errText.substring(0, 100), debug: { log } }, { status: 500 });
-    }
-
-    L("[6] parsing DALL-E response...");
+    L("[2] DALL-E status: " + dalleRes.status);
     const dalleData = await dalleRes.json();
-    L("[6] keys: " + Object.keys(dalleData || {}).join(", "));
-    L("[6] data length: " + (dalleData.data?.length ?? 0));
+    L("[2] " + JSON.stringify(dalleData).substring(0, 200));
 
-    if (dalleData.data?.[0]?.url) {
-      L("[7] got direct URL");
-      return NextResponse.json({ blueprintUrl: dalleData.data[0].url, debug: { log } });
+    let blueprintUrl: string | null = null;
+    if (dalleData.data?.[0]?.url)      blueprintUrl = dalleData.data[0].url;
+    if (dalleData.data?.[0]?.b64_json) blueprintUrl = "data:image/png;base64," + dalleData.data[0].b64_json;
+
+    if (!blueprintUrl) {
+      L("[2] no image: " + JSON.stringify(dalleData).substring(0, 300));
+      return NextResponse.json({ error: "DALL-E לא החזיר תמונה", debug: { log } }, { status: 500 });
     }
 
-    if (dalleData.data?.[0]?.b64_json) {
-      const b64 = dalleData.data[0].b64_json as string;
-      L("[7] got b64, length: " + b64.length);
-      return new Response(
-        JSON.stringify({ blueprintUrl: "data:image/png;base64," + b64, debug: { log } }),
-        { headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    L("[7] no image: " + JSON.stringify(dalleData).substring(0, 200));
-    return NextResponse.json({ error: "DALL-E לא החזיר תמונה", debug: { log } }, { status: 500 });
+    L("[3] blueprint מוכן");
+    return NextResponse.json({ blueprintUrl, debug: { log } });
 
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : String(err);
-    L("CATCH: " + m);
+    log.push("CATCH: " + m);
     return NextResponse.json({ error: m, debug: { log } }, { status: 500 });
   }
 }
