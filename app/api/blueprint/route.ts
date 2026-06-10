@@ -30,23 +30,30 @@ export async function POST(req: NextRequest) {
   const L = (m: string) => { console.log(m); log.push(m); };
 
   try {
-    const { imageBase64, mimeType = "image/jpeg" } = await req.json();
+    L("[0] parsing request...");
+    const body = await req.json();
+    const imageBase64: string = body.imageBase64 ?? "";
+    const mimeType: string    = body.mimeType    ?? "image/jpeg";
+
+    L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
 
     if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     debug: { log } }, { status: 400 });
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", debug: { log } }, { status: 500 });
 
-    L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
+    L("[2] converting base64 to buffer...");
+    const imgBytes = Uint8Array.from(atob(imageBase64), c => c.charCodeAt(0));
+    const ext      = mimeType === "image/png" ? "png" : "jpeg";
+    L("[2] buffer size: " + imgBytes.length + " bytes");
 
-    const imgBuffer = Buffer.from(imageBase64, "base64");
-    const ext = mimeType === "image/png" ? "png" : "jpeg";
-
+    L("[3] building FormData...");
     const fd = new FormData();
     fd.append("model",   "gpt-image-2");
-    fd.append("image[]", new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), `balcony.${ext}`);
+    fd.append("image[]", new Blob([imgBytes], { type: mimeType }), `balcony.${ext}`);
     fd.append("prompt",  BLUEPRINT_PROMPT);
     fd.append("n",       "1");
     fd.append("size",    "1024x1024");
 
+    L("[4] sending to DALL-E...");
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 55000);
 
@@ -62,41 +69,39 @@ export async function POST(req: NextRequest) {
       clearTimeout(timeout);
     }
 
-    L("[2] DALL-E status: " + dalleRes.status);
+    L("[5] DALL-E status: " + dalleRes.status);
 
     if (!dalleRes.ok) {
       const errText = await dalleRes.text();
-      L("[2] error: " + errText.substring(0, 200));
-      return NextResponse.json({ error: "DALL-E error " + dalleRes.status, debug: { log } }, { status: 500 });
+      L("[5] error body: " + errText.substring(0, 300));
+      return NextResponse.json({ error: "DALL-E error " + dalleRes.status + ": " + errText.substring(0, 100), debug: { log } }, { status: 500 });
     }
 
+    L("[6] parsing DALL-E response...");
     const dalleData = await dalleRes.json();
-    L("[2] got response, keys: " + Object.keys(dalleData || {}).join(", "));
+    L("[6] keys: " + Object.keys(dalleData || {}).join(", "));
+    L("[6] data length: " + (dalleData.data?.length ?? 0));
 
-    // url ישיר — הכי טוב, מחזירים אותו
     if (dalleData.data?.[0]?.url) {
-      L("[3] returning direct URL");
+      L("[7] got direct URL");
       return NextResponse.json({ blueprintUrl: dalleData.data[0].url, debug: { log } });
     }
 
-    // b64_json — מחזירים כ-data URL ישירות בלי JSON.stringify על הכל
     if (dalleData.data?.[0]?.b64_json) {
-      L("[3] returning b64 as data URL");
       const b64 = dalleData.data[0].b64_json as string;
-      L("[3] b64 length: " + b64.length);
-      // מחזירים כ-JSON עם רק השדה הנחוץ — לא stringify של dalleData המלא
+      L("[7] got b64, length: " + b64.length);
       return new Response(
         JSON.stringify({ blueprintUrl: "data:image/png;base64," + b64, debug: { log } }),
         { headers: { "Content-Type": "application/json" } }
       );
     }
 
-    L("[3] no image in response");
+    L("[7] no image: " + JSON.stringify(dalleData).substring(0, 200));
     return NextResponse.json({ error: "DALL-E לא החזיר תמונה", debug: { log } }, { status: 500 });
 
   } catch (err: unknown) {
-    const m = err instanceof Error ? err.message : "שגיאה";
-    log.push("CATCH: " + m);
+    const m = err instanceof Error ? err.message : String(err);
+    L("CATCH: " + m);
     return NextResponse.json({ error: m, debug: { log } }, { status: 500 });
   }
 }
