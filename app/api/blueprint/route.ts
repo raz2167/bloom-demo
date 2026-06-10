@@ -14,15 +14,13 @@ Remove these elements if they appear in the photo:
 - Decorative objects, people, animals
 - Any movable or temporary item
 Do NOT remove: floor, walls, ceiling, railing, columns, doors, windows, fixed built-in elements.
-Do NOT add any element that does not exist in the original photo.
 
 STEP 2 — CONVERT TO LINE DRAWING:
-Take only what remains after Step 1 and render it as a clean architectural line drawing:
+Render what remains as a clean architectural line drawing:
 - White or warm-white background
 - Soft pencil lines, no harsh black
-- Preserve the exact perspective and proportions of the original photo
+- Preserve exact perspective and proportions
 - No color fill, no shading beyond subtle depth lines
-- Do not invent or add any architectural element during this step either
 `.trim();
 
 export async function POST(req: NextRequest) {
@@ -30,16 +28,18 @@ export async function POST(req: NextRequest) {
   const L = (m: string) => { console.log(m); log.push(m); };
 
   try {
+    L("[1] parsing request");
     const { imageBase64, mimeType = "image/jpeg" } = await req.json();
 
-    if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     debug: { log } }, { status: 400 });
-    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", debug: { log } }, { status: 500 });
+    if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     step: "validate", debug: { log } }, { status: 400 });
+    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", step: "validate", debug: { log } }, { status: 500 });
 
-    L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
-
+    L("[2] converting image — " + Math.round(imageBase64.length / 1024) + "KB");
     const imgBuffer = Buffer.from(imageBase64, "base64");
-    const ext       = mimeType === "image/png" ? "png" : "jpeg";
+    const ext = mimeType === "image/png" ? "png" : "jpeg";
+    L("[2] buffer: " + imgBuffer.length + " bytes");
 
+    L("[3] building FormData");
     const fd = new FormData();
     fd.append("model",   "gpt-image-2");
     fd.append("image[]", new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), `balcony.${ext}`);
@@ -47,31 +47,47 @@ export async function POST(req: NextRequest) {
     fd.append("n",       "1");
     fd.append("size",    "1024x1024");
 
+    L("[4] calling DALL-E...");
     const dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
       method:  "POST",
       headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
       body:    fd,
     });
 
-    L("[2] DALL-E status: " + dalleRes.status);
-    const dalleData = await dalleRes.json();
-    L("[2] " + JSON.stringify(dalleData).substring(0, 200));
+    L("[5] DALL-E status: " + dalleRes.status);
 
-    let blueprintUrl: string | null = null;
-    if (dalleData.data?.[0]?.url)      blueprintUrl = dalleData.data[0].url;
-    if (dalleData.data?.[0]?.b64_json) blueprintUrl = "data:image/png;base64," + dalleData.data[0].b64_json;
-
-    if (!blueprintUrl) {
-      L("[2] no image: " + JSON.stringify(dalleData).substring(0, 300));
-      return NextResponse.json({ error: "DALL-E לא החזיר תמונה", debug: { log } }, { status: 500 });
+    if (!dalleRes.ok) {
+      const errText = await dalleRes.text();
+      L("[5] DALL-E error body: " + errText.substring(0, 300));
+      return NextResponse.json({ error: "DALL-E error " + dalleRes.status + ": " + errText.substring(0, 100), step: "dalle_call", debug: { log } }, { status: 500 });
     }
 
-    L("[3] blueprint מוכן");
-    return NextResponse.json({ blueprintUrl, debug: { log } });
+    L("[6] parsing DALL-E response");
+    const dalleData = await dalleRes.json();
+    L("[6] response keys: " + Object.keys(dalleData || {}).join(", "));
+    L("[6] data items: " + (dalleData.data?.length ?? 0));
+
+    if (dalleData.data?.[0]?.url) {
+      L("[7] returning direct URL");
+      return NextResponse.json({ blueprintUrl: dalleData.data[0].url, debug: { log } });
+    }
+
+    if (dalleData.data?.[0]?.b64_json) {
+      const b64 = dalleData.data[0].b64_json as string;
+      L("[7] returning b64 data URL, length: " + b64.length);
+      return new Response(
+        JSON.stringify({ blueprintUrl: "data:image/png;base64," + b64, debug: { log } }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    L("[7] no image in response: " + JSON.stringify(dalleData).substring(0, 200));
+    return NextResponse.json({ error: "DALL-E לא החזיר תמונה", step: "dalle_parse", debug: { log } }, { status: 500 });
 
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : String(err);
-    log.push("CATCH: " + m);
-    return NextResponse.json({ error: m, debug: { log } }, { status: 500 });
+    const s = err instanceof Error ? err.stack?.split("\n")[1]?.trim() : "";
+    L("CATCH: " + m + (s ? " | " + s : ""));
+    return NextResponse.json({ error: m, step: "catch", debug: { log } }, { status: 500 });
   }
 }
