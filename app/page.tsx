@@ -15,6 +15,7 @@ interface UserData {
 }
 interface ProductItem { name: string; qty: number; unitPrice: number; total: number; }
 interface Products { items: ProductItem[]; grandTotal: number; }
+interface AppError { message: string; step?: string; route?: string; log?: string[]; }
 
 async function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -337,6 +338,69 @@ function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl
   );
 }
 
+// ── Error screen ─────────────────────────────────────
+function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void }) {
+  const [showLog, setShowLog] = useState(false);
+  return (
+    <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
+      <div style={{ background:"#1A1714", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <span style={{ color:"#FAF7F2", fontSize:"15px", fontWeight:"300", letterSpacing:"3px" }}>HIBLOOM</span>
+        <span style={{ color:"rgba(250,247,242,0.35)", fontSize:"11px" }}>שגיאה</span>
+      </div>
+      <div style={{ padding:"24px 16px" }}>
+        <div style={{ textAlign:"center", marginBottom:"24px" }}>
+          <div style={{ fontSize:"48px", marginBottom:"12px" }}>⚠️</div>
+          <h2 style={{ fontSize:"20px", fontWeight:"300", color:"#1A1714", margin:"0 0 8px" }}>משהו השתבש</h2>
+          <p style={{ fontSize:"13px", color:"#8B7D6B", margin:0 }}>אנחנו כבר על זה</p>
+        </div>
+
+        <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:"12px", padding:"16px", marginBottom:"16px" }}>
+          {error.route && (
+            <div style={{ fontSize:"11px", color:"#DC2626", fontWeight:"600", marginBottom:"6px", letterSpacing:"0.5px" }}>
+              ROUTE: {error.route.toUpperCase()}
+            </div>
+          )}
+          {error.step && (
+            <div style={{ fontSize:"11px", color:"#DC2626", fontWeight:"600", marginBottom:"8px", letterSpacing:"0.5px" }}>
+              STEP: {error.step}
+            </div>
+          )}
+          <div style={{ fontSize:"13px", color:"#DC2626", lineHeight:"1.6", wordBreak:"break-word" }}>
+            {error.message}
+          </div>
+        </div>
+
+        {error.log && error.log.length > 0 && (
+          <div style={{ marginBottom:"16px" }}>
+            <button
+              onClick={() => setShowLog(v => !v)}
+              style={{ background:"transparent", border:"1px solid rgba(139,125,107,0.3)", borderRadius:"8px", padding:"8px 14px", fontSize:"12px", color:"#8B7D6B", cursor:"pointer", fontFamily:"sans-serif", width:"100%" }}
+            >
+              {showLog ? "הסתר לוגים ▲" : "הצג לוגים טכניים ▼"}
+            </button>
+            {showLog && (
+              <div style={{ marginTop:"8px", background:"#1A1714", borderRadius:"10px", padding:"12px", maxHeight:"200px", overflowY:"auto" }}>
+                {error.log.map((line, i) => (
+                  <div key={i} style={{ fontSize:"11px", color:"#7AA870", fontFamily:"monospace", lineHeight:"1.8" }}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={onReset}
+          style={{ width:"100%", padding:"17px", background:"#1A1714", color:"#FAF7F2", border:"none", borderRadius:"14px", fontSize:"15px", fontWeight:"600", fontFamily:"sans-serif", cursor:"pointer" }}
+        >
+          נסה שוב ←
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Order confirmation ────────────────────────────────
 function OrderScreen() {
   return (
@@ -357,6 +421,7 @@ export default function Home() {
   const [step,         setStep]         = useState(0);
   const [analysis,     setAnalysis]     = useState<Analysis|null>(null);
   const [photoDataUrl, setPhotoDataUrl] = useState<string|null>(null);
+  const [appError,     setAppError]     = useState<AppError|null>(null);
   const [errorMsg,     setErrorMsg]     = useState("");
   const [userData,     setUserData]     = useState<UserData>({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
   const [blueprintUrl, setBlueprintUrl] = useState<string|null>(null);
@@ -442,42 +507,45 @@ export default function Home() {
     setState("planning");
     let dallePrompt = "";
     try {
-      const res  = await fetch("/api/plan", {
+      const res = await fetch("/api/plan", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          blueprintUrl,
-          width_m:      userData.width_m,
-          depth_m:      userData.depth_m,
-          direction:    userData.direction,
-          sun_pct:      userData.sun_pct,
-          garden_style: userData.garden_style,
-          floor_color:  analysis?.floor_color   ?? "אפור",
-          wall_color:   analysis?.wall_color    ?? "לבן",
-          railing_color:analysis?.railing_color ?? "אפור",
-        }),
+        body: JSON.stringify({ blueprintUrl, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"אפור", wall_color:analysis?.wall_color??"לבן", railing_color:analysis?.railing_color??"אפור" }),
       });
-      const data = await res.json();
-      if (!data.dallePrompt) { setErrorMsg(data.error||"שגיאה בתכנון"); setState("error"); return; }
-      dallePrompt = data.dallePrompt;
-      setWaitingFacts(data.waitingFacts??[]);
-      setProducts(data.products);
+      let data: Record<string,unknown>;
+      try { data = await res.json(); }
+      catch { setAppError({ message: "plan route החזיר תגובה לא תקינה (status " + res.status + ")", route: "/api/plan", step: "response_parse" }); setState("error"); return; }
+      if (!data.dallePrompt) {
+        setAppError({ message: String(data.error || "חסר dallePrompt"), route: "/api/plan", step: String(data.step || "unknown"), log: data.debug ? (data.debug as Record<string,unknown>).log as string[] : [] });
+        setState("error"); return;
+      }
+      dallePrompt = data.dallePrompt as string;
+      setWaitingFacts((data.waitingFacts as string[]) ?? []);
+      setProducts(data.products as Products);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "שגיאת רשת");
+      setAppError({ message: err instanceof Error ? err.message : "שגיאת רשת", route: "/api/plan", step: "fetch" });
       setState("error"); return;
     }
 
     // שלב ב — compose (DALL-E מצייר)
     setState("composing");
     try {
-      const res  = await fetch("/api/compose", {
+      const res = await fetch("/api/compose", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ blueprintUrl, dallePrompt }),
       });
-      const data = await res.json();
-      if (data.imageUrl) { setComposedUrl(data.imageUrl); setState("result"); }
-      else { setErrorMsg(data.error||"שגיאה בעיצוב"); setState("error"); }
+      if (!res.ok) {
+        let errData: Record<string,unknown> = {};
+        try { errData = await res.json(); } catch { /* ignore */ }
+        setAppError({ message: String(errData.error || "compose נכשל עם status " + res.status), route: "/api/compose", step: String(errData.step || "http_" + res.status), log: errData.debug ? (errData.debug as Record<string,unknown>).log as string[] : [] });
+        setState("error"); return;
+      }
+      let data: Record<string,unknown>;
+      try { data = await res.json(); }
+      catch { setAppError({ message: "compose החזיר תגובה לא תקינה", route: "/api/compose", step: "response_parse" }); setState("error"); return; }
+      if (data.imageUrl) { setComposedUrl(data.imageUrl as string); setState("result"); }
+      else { setAppError({ message: String(data.error || "חסר imageUrl"), route: "/api/compose", step: String(data.step || "unknown"), log: data.debug ? (data.debug as Record<string,unknown>).log as string[] : [] }); setState("error"); }
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "שגיאת רשת");
+      setAppError({ message: err instanceof Error ? err.message : "שגיאת רשת", route: "/api/compose", step: "fetch" });
       setState("error");
     }
   };
@@ -485,6 +553,7 @@ export default function Home() {
   const handleReset = () => {
     setState("idle"); setAnalysis(null); setPhotoDataUrl(null); setErrorMsg("");
     setBlueprintUrl(null); setComposedUrl(null); setProducts(null); setWaitingFacts([]);
+    setAppError(null);
     blueprintPromiseRef.current = null;
     setUserData({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
     if (fileRef.current) fileRef.current.value = "";
@@ -495,6 +564,7 @@ export default function Home() {
   if (state==="planning")   return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={[]} />;
   if (state==="composing")  return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts} />;
   if (state==="order")      return <OrderScreen />;
+  if (state==="error")      return <ErrorScreen error={appError ?? { message: errorMsg || "שגיאה לא ידועה" }} onReset={handleReset} />;
   if (state==="result"&&composedUrl&&products) return <ResultScreen composedUrl={composedUrl} products={products} onOrder={()=>setState("order")} onReset={handleReset} />;
   if (state==="blueprint"&&blueprintUrl&&photoDataUrl) return <BlueprintScreen blueprintUrl={blueprintUrl} photoDataUrl={photoDataUrl} onDesign={handleDesign} onReset={handleReset} />;
   if (state==="confirm"&&analysis&&photoDataUrl) return <ConfirmScreen photoDataUrl={photoDataUrl} analysis={analysis} userData={userData} setUserData={setUserData} onNext={()=>setState("details")} />;
