@@ -1,8 +1,7 @@
 // app/api/blueprint/route.ts
-// מקבל תמונת מרפסת → מחזיר שרטוט קווי אדריכלי נקי (DALL-E edits)
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 90;
+export const maxDuration = 60;
 
 const BLUEPRINT_PROMPT = `
 You are editing a balcony photo. Follow these two steps in order:
@@ -33,43 +32,67 @@ export async function POST(req: NextRequest) {
   try {
     const { imageBase64, mimeType = "image/jpeg" } = await req.json();
 
-    if (!imageBase64)              return NextResponse.json({ error: "חסרה תמונה",       debug: { log } }, { status: 400 });
+    if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     debug: { log } }, { status: 400 });
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", debug: { log } }, { status: 500 });
 
     L("[1] " + Math.round(imageBase64.length / 1024) + "KB — שולח ל-DALL-E");
 
-    // המרת base64 ל-Buffer
     const imgBuffer = Buffer.from(imageBase64, "base64");
-    const ext       = mimeType === "image/png" ? "png" : "jpeg";
+    const ext = mimeType === "image/png" ? "png" : "jpeg";
 
     const fd = new FormData();
-    fd.append("model",  "gpt-image-2");
+    fd.append("model",   "gpt-image-2");
     fd.append("image[]", new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), `balcony.${ext}`);
-    fd.append("prompt", BLUEPRINT_PROMPT);
-    fd.append("n",      "1");
-    fd.append("size",   "1024x1024");
+    fd.append("prompt",  BLUEPRINT_PROMPT);
+    fd.append("n",       "1");
+    fd.append("size",    "1024x1024");
 
-    const dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
-      method:  "POST",
-      headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
-      body:    fd,
-    });
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 55000);
 
-    L("[2] DALL-E status: " + dalleRes.status);
-    const dalleData = await dalleRes.json();
-    L("[2] " + JSON.stringify(dalleData).substring(0, 200));
-
-    let blueprintUrl: string | null = null;
-    if (dalleData.data?.[0]?.url)      blueprintUrl = dalleData.data[0].url;
-    if (dalleData.data?.[0]?.b64_json) blueprintUrl = "data:image/png;base64," + dalleData.data[0].b64_json;
-
-    if (!blueprintUrl) {
-      L("[2] שגיאה מ-DALL-E: " + JSON.stringify(dalleData).substring(0, 300));
-      return NextResponse.json({ error: "DALL-E לא החזיר תמונה", debug: { log } }, { status: 500 });
+    let dalleRes: Response;
+    try {
+      dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
+        method:  "POST",
+        headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
+        body:    fd,
+        signal:  controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
     }
 
-    L("[3] blueprint מוכן ✓");
-    return NextResponse.json({ blueprintUrl, debug: { log } });
+    L("[2] DALL-E status: " + dalleRes.status);
+
+    if (!dalleRes.ok) {
+      const errText = await dalleRes.text();
+      L("[2] error: " + errText.substring(0, 200));
+      return NextResponse.json({ error: "DALL-E error " + dalleRes.status, debug: { log } }, { status: 500 });
+    }
+
+    const dalleData = await dalleRes.json();
+    L("[2] got response, keys: " + Object.keys(dalleData || {}).join(", "));
+
+    // url ישיר — הכי טוב, מחזירים אותו
+    if (dalleData.data?.[0]?.url) {
+      L("[3] returning direct URL");
+      return NextResponse.json({ blueprintUrl: dalleData.data[0].url, debug: { log } });
+    }
+
+    // b64_json — מחזירים כ-data URL ישירות בלי JSON.stringify על הכל
+    if (dalleData.data?.[0]?.b64_json) {
+      L("[3] returning b64 as data URL");
+      const b64 = dalleData.data[0].b64_json as string;
+      L("[3] b64 length: " + b64.length);
+      // מחזירים כ-JSON עם רק השדה הנחוץ — לא stringify של dalleData המלא
+      return new Response(
+        JSON.stringify({ blueprintUrl: "data:image/png;base64," + b64, debug: { log } }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    L("[3] no image in response");
+    return NextResponse.json({ error: "DALL-E לא החזיר תמונה", debug: { log } }, { status: 500 });
 
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : "שגיאה";
