@@ -503,7 +503,7 @@ export default function Home() {
       try { data = await res.json(); }
       catch { setAppError({ message: "plan route returned invalid response (status " + res.status + ")", route: "/api/plan", step: "response_parse" }); setState("error"); return; }
       if (!data.dallePrompt) {
-        setAppError({ message: String(data.error || "חסר dallePrompt"), route: "/api/plan", step: String(data.step || "unknown"), log: data.debug ? (data.debug as Record<string,unknown>).log as string[] : [] });
+        setAppError({ message: String(data.error || "missing dallePrompt"), route: "/api/plan", step: String(data.step || "unknown"), log: Array.isArray((data.debug as Record<string,unknown>)?.log) ? (data.debug as Record<string,string[]>).log : [] });
         setState("error"); return;
       }
       dallePrompt = data.dallePrompt as string;
@@ -524,14 +524,14 @@ export default function Home() {
       if (!res.ok) {
         let errData: Record<string,unknown> = {};
         try { errData = await res.json(); } catch { /* ignore */ }
-        setAppError({ message: String(errData.error || "compose נכשל עם status " + res.status), route: "/api/compose", step: String(errData.step || "http_" + res.status), log: errData.debug ? (errData.debug as Record<string,unknown>).log as string[] : [] });
+        setAppError({ message: String(errData.error || "compose failed with status " + res.status), route: "/api/compose", step: String(errData.step || "http_" + res.status), log: Array.isArray((errData.debug as Record<string,unknown>)?.log) ? (errData.debug as Record<string,string[]>).log : [] });
         setState("error"); return;
       }
       let data: Record<string,unknown> = {};
       try { data = await res.json(); }
       catch { setAppError({ message: "compose returned invalid response", route: "/api/compose", step: "response_parse" }); setState("error"); return; }
       if (data.imageUrl) { setComposedUrl(data.imageUrl as string); setState("result"); }
-      else { setAppError({ message: String(data.error || "חסר imageUrl"), route: "/api/compose", step: String(data.step || "unknown"), log: data.debug ? (data.debug as Record<string,unknown>).log as string[] : [] }); setState("error"); }
+      else { setAppError({ message: String(data.error || "missing imageUrl"), route: "/api/compose", step: String(data.step || "unknown"), log: Array.isArray((data.debug as Record<string,unknown>)?.log) ? (data.debug as Record<string,string[]>).log : [] }); setState("error"); }
     } catch (err: unknown) {
       setAppError({ message: err instanceof Error ? err.message : "שגיאת רשת", route: "/api/compose", step: "fetch" });
       setState("error");
