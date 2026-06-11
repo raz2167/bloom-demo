@@ -451,7 +451,7 @@ export default function Home() {
         const lines = buf.split("\n"); buf = lines.pop()??"";
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
-          let ev: Record<string,unknown>;
+          let ev: Record<string,unknown> = {};
           try { ev = JSON.parse(line.slice(6).trim()); } catch { continue; }
           if (ev.type==="step") {
             setStep(ev.step as number);
@@ -499,9 +499,9 @@ export default function Home() {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ blueprintUrl, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"אפור", wall_color:analysis?.wall_color??"לבן", railing_color:analysis?.railing_color??"אפור" }),
       });
-      let data: Record<string,unknown>;
+      let data: Record<string,unknown> = {};
       try { data = await res.json(); }
-      catch { setAppError({ message: "plan route החזיר תגובה לא תקינה (status " + res.status + ")", route: "/api/plan", step: "response_parse" }); setState("error"); return; }
+      catch { setAppError({ message: "plan route returned invalid response (status " + res.status + ")", route: "/api/plan", step: "response_parse" }); setState("error"); return; }
       if (!data.dallePrompt) {
         setAppError({ message: String(data.error || "חסר dallePrompt"), route: "/api/plan", step: String(data.step || "unknown"), log: data.debug ? (data.debug as Record<string,unknown>).log as string[] : [] });
         setState("error"); return;
@@ -527,9 +527,9 @@ export default function Home() {
         setAppError({ message: String(errData.error || "compose נכשל עם status " + res.status), route: "/api/compose", step: String(errData.step || "http_" + res.status), log: errData.debug ? (errData.debug as Record<string,unknown>).log as string[] : [] });
         setState("error"); return;
       }
-      let data: Record<string,unknown>;
+      let data: Record<string,unknown> = {};
       try { data = await res.json(); }
-      catch { setAppError({ message: "compose החזיר תגובה לא תקינה", route: "/api/compose", step: "response_parse" }); setState("error"); return; }
+      catch { setAppError({ message: "compose returned invalid response", route: "/api/compose", step: "response_parse" }); setState("error"); return; }
       if (data.imageUrl) { setComposedUrl(data.imageUrl as string); setState("result"); }
       else { setAppError({ message: String(data.error || "חסר imageUrl"), route: "/api/compose", step: String(data.step || "unknown"), log: data.debug ? (data.debug as Record<string,unknown>).log as string[] : [] }); setState("error"); }
     } catch (err: unknown) {
