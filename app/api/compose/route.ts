@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const maxDuration = 300;
 
 // Safety net: always prepend blueprint-preserve + floor placement instruction
-const BLUEPRINT_PREFIX = "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace or redraw the floor, walls or railing. All planters must be placed ON THE FLOOR SURFACE, standing upright, pushed against the back wall, with the railing clearly visible BEHIND and ABOVE them. Planters appear in the LOWER HALF of the image, not on top of the railing. Only add the following colored elements on top of the existing line drawing: ";
+const BLUEPRINT_PREFIX = "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace or redraw the floor, walls or railing. All planters must be placed flush against the back wall, touching it, their long 60cm side running PARALLEL to the wall like window boxes - NOT sticking out into the balcony. The railing is visible above and behind the planters. Only add the following colored elements on top of the existing line drawing: ";
 
 async function getBlueprintBuffer(blueprintUrl: string): Promise<Buffer> {
   if (blueprintUrl.startsWith("data:")) {
