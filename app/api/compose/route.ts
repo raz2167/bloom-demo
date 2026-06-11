@@ -22,16 +22,15 @@ export async function POST(req: NextRequest) {
     L("[1] parsing request");
     const { blueprintUrl, dallePrompt } = await req.json() as { blueprintUrl: string; dallePrompt: string };
 
-    if (!blueprintUrl)               return NextResponse.json({ error: "חסר blueprintUrl", step: "validate", debug: { log } }, { status: 400 });
-    if (!dallePrompt)                return NextResponse.json({ error: "חסר dallePrompt",  step: "validate", debug: { log } }, { status: 400 });
-    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key",  step: "validate", debug: { log } }, { status: 500 });
+    if (!blueprintUrl)               return NextResponse.json({ error: "missing blueprintUrl", step: "validate", debug: { log } }, { status: 400 });
+    if (!dallePrompt)                return NextResponse.json({ error: "missing dallePrompt",  step: "validate", debug: { log } }, { status: 400 });
+    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "missing OpenAI key",  step: "validate", debug: { log } }, { status: 500 });
 
     L("[2] extracting blueprint buffer");
     const bpBuf = await getBlueprintBuffer(blueprintUrl);
     L("[2] buffer: " + bpBuf.length + " bytes");
 
     L("[3] prompt length: " + dallePrompt.length + " chars");
-    L("[3] prompt preview: " + dallePrompt.substring(0, 100));
 
     L("[4] building FormData");
     const fd = new FormData();
@@ -41,7 +40,7 @@ export async function POST(req: NextRequest) {
     fd.append("n",       "1");
     fd.append("size",    "1024x1024");
 
-    L("[5] calling DALL-E edits...");
+    L("[5] calling DALL-E edits");
     const dr = await fetch("https://api.openai.com/v1/images/edits", {
       method:  "POST",
       headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
@@ -52,17 +51,16 @@ export async function POST(req: NextRequest) {
 
     if (!dr.ok) {
       const errText = await dr.text();
-      L("[6] DALL-E error: " + errText.substring(0, 300));
-      return NextResponse.json({ error: "DALL-E error " + dr.status + ": " + errText.substring(0, 100), step: "dalle_call", debug: { log } }, { status: 500 });
+      L("[6] error: " + errText.substring(0, 300));
+      return NextResponse.json({ error: "DALL-E error " + dr.status, step: "dalle_call", debug: { log } }, { status: 500 });
     }
 
-    L("[7] parsing DALL-E response");
+    L("[7] parsing response");
     const dd = await dr.json();
-    L("[7] response keys: " + Object.keys(dd || {}).join(", "));
     L("[7] data items: " + (dd.data?.length ?? 0));
 
     if (dd.data?.[0]?.url) {
-      L("[8] returning direct URL");
+      L("[8] returning URL");
       return NextResponse.json({ imageUrl: dd.data[0].url, debug: { log } });
     }
 
@@ -75,13 +73,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    L("[8] no image in response: " + JSON.stringify(dd).substring(0, 200));
-    return NextResponse.json({ error: "DALL-E לא החזיר תמונה", step: "dalle_parse", debug: { log } }, { status: 500 });
+    L("[8] no image in response");
+    return NextResponse.json({ error: "DALL-E returned no image", step: "dalle_parse", debug: { log } }, { status: 500 });
 
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : String(err);
-    const s = err instanceof Error ? err.stack?.split("\n")[1]?.trim() : "";
-    L("CATCH: " + m + (s ? " | " + s : ""));
+    L("CATCH: " + m);
     return NextResponse.json({ error: m, step: "catch", debug: { log } }, { status: 500 });
   }
 }
