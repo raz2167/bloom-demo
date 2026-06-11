@@ -7,6 +7,9 @@ export const maxDuration = 60;
 const PRICES = { adanit_unit:189, plant_small:35, plant_medium:55, plant_large:85, soil_liter:1.2, perlite_liter:2.5, tuff_liter:1.8 };
 const PLANTER_VOLUME_L = 43.2;
 
+interface PlantItem { nameHe: string; count: number; size: string; }
+interface PlanterItem { fillMix: { soilPct: number; perlitePct: number; tuffPct: number }; plants: PlantItem[]; }
+
 async function getBlueprintBase64(blueprintUrl: string): Promise<string> {
   if (blueprintUrl.startsWith("data:")) {
     const comma = blueprintUrl.indexOf(",");
@@ -26,8 +29,8 @@ export async function POST(req: NextRequest) {
     L("[1] parsing request");
     const { blueprintUrl, width_m, depth_m, direction, sun_pct, garden_style, floor_color, wall_color, railing_color } = await req.json();
 
-    if (!blueprintUrl)               return NextResponse.json({ error: "חסר blueprintUrl",  step: "validate", debug: { log } }, { status: 400 });
-    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "חסר Anthropic key", step: "validate", debug: { log } }, { status: 500 });
+    if (!blueprintUrl)                  return NextResponse.json({ error: "missing blueprintUrl",  step: "validate", debug: { log } }, { status: 400 });
+    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "missing Anthropic key", step: "validate", debug: { log } }, { status: 500 });
 
     L("[2] extracting blueprint base64");
     const blueprintBase64 = await getBlueprintBase64(blueprintUrl);
@@ -46,18 +49,18 @@ RULES:
 - Plants must look established (2-3 seasons old, full and lush)
 - Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia
 - Mediterranean: lavender/rosemary/thyme. Modern: grasses/succulents. Jungle: coleus/caladium/ferns
-- Fill: drought plants=60%soil+20%perlite+20%tuff, flowering=70%+20%+10%, succulents=40%+40%+20%, shade=80%+10%+10%
+- Fill: drought=60%soil+20%perlite+20%tuff, flowering=70%+20%+10%, succulents=40%+40%+20%, shade=80%+10%+10%
 - Planter color from: anthracite, light gray, terracotta, sand/beige (match balcony colors)
-- waitingFacts must be in Hebrew, no special quote chars, plain text only
+- waitingFacts in Hebrew only, plain text, no special characters
 
-Return ONLY valid JSON:
+Return ONLY valid JSON, no markdown:
 {
   "planterCount": 2,
   "layout": "line",
   "planterColor": "anthracite gray",
   "planterColorHe": "אפור אנתרציט",
   "perspective": { "vanishingPointDescription": "...", "floorAngle": "...", "railingPosition": "...", "depthCue": "..." },
-  "planters": [{ "id": 1, "position": "left third", "rotation": "parallel to railing", "plants": [{ "nameHe": "לבנדר", "nameEn": "lavender", "count": 2, "size": "medium", "description": "purple flowering lavender bush 30cm tall" }], "fillMix": { "soilPct": 60, "perlitePct": 20, "tuffPct": 20 } }],
+  "planters": [{ "id": 1, "position": "left third", "rotation": "parallel to railing", "plants": [{ "nameHe": "לבנדר", "nameEn": "lavender", "count": 2, "size": "medium", "description": "purple flowering lavender 30cm tall" }], "fillMix": { "soilPct": 60, "perlitePct": 20, "tuffPct": 20 } }],
   "dallePrompt": "...",
   "waitingFacts": ["fact1", "fact2", "fact3", "fact4", "fact5"]
 }`;
@@ -74,8 +77,7 @@ Return ONLY valid JSON:
     });
 
     const raw = response.content.filter(b => b.type === "text").map(b => (b as {type:"text";text:string}).text).join("");
-    L("[3] Claude response length: " + raw.length);
-    L("[3] first 100 chars: " + raw.substring(0, 100));
+    L("[3] response length: " + raw.length);
 
     L("[4] parsing JSON");
     let plan: Record<string, unknown>;
@@ -83,18 +85,14 @@ Return ONLY valid JSON:
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const start = cleaned.indexOf("{");
       const end   = cleaned.lastIndexOf("}");
-      if (start === -1 || end === -1) throw new Error("no JSON object found in response");
+      if (start === -1 || end === -1) throw new Error("no JSON found");
       plan = JSON.parse(cleaned.slice(start, end + 1));
     } catch (parseErr) {
-      L("[4] JSON parse error: " + parseErr);
-      L("[4] raw response: " + raw.substring(0, 500));
-      return NextResponse.json({ error: "קלוד לא החזיר JSON תקין", step: "json_parse", debug: { log } }, { status: 500 });
+      L("[4] parse error: " + parseErr);
+      return NextResponse.json({ error: "invalid JSON from Claude", step: "json_parse", debug: { log } }, { status: 500 });
     }
 
-    L("[4] plan: " + plan.planterCount + " planters, layout=" + plan.layout);
-
-    interface PlantItem { nameHe: string; count: number; size: string; }
-    interface PlanterItem { fillMix: { soilPct: number; perlitePct: number; tuffPct: number }; plants: PlantItem[]; }
+    L("[4] plan: " + plan.planterCount + " planters");
 
     L("[5] calculating products");
     const items: { name: string; qty: number; unitPrice: number; total: number }[] = [];
@@ -103,6 +101,7 @@ Return ONLY valid JSON:
 
     const allPlants: PlantItem[] = [];
     (plan.planters as PlanterItem[]).forEach(p => p.plants.forEach(pl => allPlants.push(pl)));
+
     const plantMap: Record<string, { count: number; size: string }> = {};
     allPlants.forEach(pl => {
       if (!plantMap[pl.nameHe]) plantMap[pl.nameHe] = { count: 0, size: pl.size };
@@ -123,6 +122,7 @@ Return ONLY valid JSON:
     const soilBags    = Math.ceil(totalSoilL    / 20);
     const perliteBags = Math.ceil(totalPerliteL / 10);
     const tuffBags    = Math.ceil(totalTuffL    / 10);
+
     if (soilBags > 0)    items.push({ name: "אדמה לצמחים שק 20 ליטר",  qty: soilBags,    unitPrice: Math.round(PRICES.soil_liter    * 20), total: soilBags    * Math.round(PRICES.soil_liter    * 20) });
     if (perliteBags > 0) items.push({ name: "פרלייט שק 10 ליטר",        qty: perliteBags, unitPrice: Math.round(PRICES.perlite_liter * 10), total: perliteBags * Math.round(PRICES.perlite_liter * 10) });
     if (tuffBags > 0)    items.push({ name: "טוף שק 10 ליטר",            qty: tuffBags,    unitPrice: Math.round(PRICES.tuff_liter    * 10), total: tuffBags    * Math.round(PRICES.tuff_liter    * 10) });
@@ -134,8 +134,7 @@ Return ONLY valid JSON:
 
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : String(err);
-    const s = err instanceof Error ? err.stack?.split("\n")[1]?.trim() : "";
-    L("CATCH: " + m + (s ? " | " + s : ""));
+    L("CATCH: " + m);
     return NextResponse.json({ error: m, step: "catch", debug: { log } }, { status: 500 });
   }
 }
