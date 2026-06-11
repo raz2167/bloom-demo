@@ -6,7 +6,7 @@ export const maxDuration = 60;
 const BLUEPRINT_PROMPT = `
 You are editing a balcony photo. Follow these two steps in order:
 
-STEP 1 - REMOVE (do not add anything):
+STEP 1 — REMOVE (do not add anything):
 Remove these elements if they appear in the photo:
 - Furniture: chairs, tables, sofas, shelves, storage
 - Plants, trees, planters of any kind
@@ -15,7 +15,7 @@ Remove these elements if they appear in the photo:
 - Any movable or temporary item
 Do NOT remove: floor, walls, ceiling, railing, columns, doors, windows, fixed built-in elements.
 
-STEP 2 - CONVERT TO LINE DRAWING:
+STEP 2 — CONVERT TO LINE DRAWING:
 Render what remains as a clean architectural line drawing:
 - White or warm-white background
 - Soft pencil lines, no harsh black
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     if (!imageBase64)                return NextResponse.json({ error: "חסרה תמונה",     step: "validate", debug: { log } }, { status: 400 });
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "חסר OpenAI key", step: "validate", debug: { log } }, { status: 500 });
 
-    L("[2] converting image - " + Math.round(imageBase64.length / 1024) + "KB");
+    L("[2] converting image — " + Math.round(imageBase64.length / 1024) + "KB");
     const imgBuffer = Buffer.from(imageBase64, "base64");
     const ext = mimeType === "image/png" ? "png" : "jpeg";
     L("[2] buffer: " + imgBuffer.length + " bytes");
