@@ -526,5 +526,5 @@ export default function Home() {
   if (state==="blueprint"&&blueprintUrl&&photoDataUrl) return <BlueprintScreen blueprintUrl={blueprintUrl} photoDataUrl={photoDataUrl} onDesign={handleDesign} onReset={handleReset} />;
   if (state==="confirm"&&analysis&&photoDataUrl) return <ConfirmScreen photoDataUrl={photoDataUrl} analysis={analysis} userData={userData} setUserData={setUserData} onNext={()=>setState("details")} />;
   if (state==="details") return <DetailsScreen userData={userData} setUserData={setUserData} onNext={handleDetailsComplete} />;
-  return <IdleScreen onFile={handleFile} errorMsg={state==="error"?errorMsg:""} fileRef={fileRef} />;
+  return <IdleScreen onFile={handleFile} errorMsg={errorMsg} fileRef={fileRef} />;
 }
