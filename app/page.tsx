@@ -34,7 +34,6 @@ async function compressImage(file: File): Promise<string> {
   });
 }
 
-Shared UI 
 function Header({ subtitle }: { subtitle: string }) {
   return (
     <div style={{ background:"#1A1714", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -83,7 +82,6 @@ function YesNo({ label, value, onChange }: { label:string; value:boolean|null; o
   );
 }
 
-Spinner 
 const SPIN_CSS = `@keyframes spin{to{transform:rotate(360deg)}}@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}`;
 function Spinner({ emoji }: { emoji:string }) {
   return (
@@ -97,7 +95,6 @@ function Spinner({ emoji }: { emoji:string }) {
   );
 }
 
-Tips screen 
 function TipsScreen({ title, subtitle, facts }: { title:string; subtitle:string; facts:string[] }) {
   const [idx, setIdx] = useState(0);
   const [vis, setVis] = useState(true);
@@ -129,7 +126,6 @@ function TipsScreen({ title, subtitle, facts }: { title:string; subtitle:string;
   );
 }
 
-Loading (analyze) 
 function LoadingScreen({ step }: { step:number }) {
   const steps = [{ label:"מנתח את המרפסת...", time:"~10 שנ׳" },{ label:"מכין ניתוח...", time:"~3 שנ׳" }];
   return (
@@ -154,7 +150,6 @@ function LoadingScreen({ step }: { step:number }) {
   );
 }
 
-Confirm 
 function ConfirmScreen({ photoDataUrl, analysis, userData, setUserData, onNext }: { photoDataUrl:string; analysis:Analysis; userData:UserData; setUserData:(u:UserData)=>void; onNext:()=>void }) {
   const SUN: Record<string,string> = {"שמש מלאה":"☀️","חצי צל":"⛅","צל":"🌑"};
   const tags = [
@@ -192,7 +187,6 @@ function ConfirmScreen({ photoDataUrl, analysis, userData, setUserData, onNext }
   );
 }
 
-Details 
 function DetailsScreen({ userData, setUserData, onNext }: { userData:UserData; setUserData:(u:UserData)=>void; onNext:()=>void }) {
   const DIRS = ["צפון","דרום","מזרח","מערב"];
   const STYLES = [
@@ -245,7 +239,6 @@ function DetailsScreen({ userData, setUserData, onNext }: { userData:UserData; s
   );
 }
 
-//Idle 
 function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; errorMsg:string; fileRef:React.RefObject<HTMLInputElement> }) {
   return (
     <div dir="rtl" style={{ background:"linear-gradient(180deg,#1A1714 0%,#2C2420 40%,#FAF7F2 40%)", minHeight:"100vh", fontFamily:"sans-serif" }}>
@@ -278,7 +271,6 @@ function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; erro
   );
 }
 
-//Blueprint 
 function BlueprintScreen({ blueprintUrl, photoDataUrl, onDesign, onReset }: { blueprintUrl:string; photoDataUrl:string; onDesign:()=>void; onReset:()=>void }) {
   return (
     <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
@@ -305,7 +297,6 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, onDesign, onReset }: { bl
   );
 }
 
-//Result 
 function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl:string; products:Products; onOrder:()=>void; onReset:()=>void }) {
   return (
     <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
@@ -338,7 +329,6 @@ function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl
   );
 }
 
-//Error screen 
 function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void }) {
   const [showLog, setShowLog] = useState(false);
   return (
@@ -401,7 +391,6 @@ function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void 
   );
 }
 
-//Order confirmation 
 function OrderScreen() {
   return (
     <div dir="rtl" style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#FAF7F2", padding:"40px 24px", fontFamily:"sans-serif", textAlign:"center" }}>
@@ -415,7 +404,6 @@ function OrderScreen() {
   );
 }
 
-//Main 
 export default function Home() {
   const [state,        setState]        = useState<AppState>("idle");
   const [step,         setStep]         = useState(0);
