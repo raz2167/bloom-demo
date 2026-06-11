@@ -17,6 +17,15 @@ interface ProductItem { name: string; qty: number; unitPrice: number; total: num
 interface Products { items: ProductItem[]; grandTotal: number; }
 interface AppError { message: string; step?: string; route?: string; log?: string[]; }
 
+const NURSERY_FACTS = [
+  "משתלת רז בהרצליה פעילה כבר מעל 20 שנה ומתמחה בצמחי מרפסת ים-תיכוניים",
+  "הצוות של משתלת רז ליווה מאות פרויקטי גינון בבתים פרטיים באזור השרון",
+  "משתלת רז מציעה מעל 300 זני צמחים המותאמים לאקלים הישראלי",
+  "כל הצמחים במשתלת רז גדלו בתנאי חום ולחות ישראליים ומוכנים לשתילה ישירה",
+  "משתלת רז מתמחה בצמחים עמידי בצורת שחוסכים עד 60 אחוז מים",
+  "הצוות המקצועי של משתלת רז זמין לייעוץ אישי לכל לקוח"
+];
+
 async function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -146,7 +155,28 @@ function LoadingScreen({ step }: { step:number }) {
           );
         })}
       </div>
+      <div style={{ width:"100%", maxWidth:"320px", marginTop:"32px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(122,168,112,0.2)", borderRadius:"16px", padding:"20px", minHeight:"100px" }}>
+        <div style={{ fontSize:"28px", marginBottom:"10px", textAlign:"center" }}>🌱</div>
+        <NurseryFactsTicker />
+      </div>
     </div>
+  );
+}
+
+function NurseryFactsTicker() {
+  const [idx, setIdx] = useState(0);
+  const [vis, setVis] = useState(true);
+  useEffect(()=>{
+    const t = setInterval(()=>{
+      setVis(false);
+      setTimeout(()=>{ setIdx(i=>(i+1)%NURSERY_FACTS.length); setVis(true); }, 400);
+    }, 5000);
+    return ()=>clearInterval(t);
+  }, []);
+  return (
+    <p style={{ margin:0, color:"rgba(250,248,245,0.8)", fontSize:"14px", lineHeight:"1.7", textAlign:"center", fontWeight:"300", opacity:vis?1:0, transition:"opacity 0.3s" }}>
+      {NURSERY_FACTS[idx]}
+    </p>
   );
 }
 
@@ -391,6 +421,7 @@ export default function Home() {
   const [composedUrl,  setComposedUrl]  = useState<string|null>(null);
   const [products,     setProducts]     = useState<Products|null>(null);
   const [waitingFacts, setWaitingFacts] = useState<string[]>([]);
+  const [planningFacts, setPlanningFacts] = useState<string[]>([]);
 
   const blueprintPromiseRef = useRef<Promise<string|null>|null>(null);
   const fileRef = useRef<HTMLInputElement>(null!);
@@ -398,7 +429,7 @@ export default function Home() {
   useEffect(()=>{ window.scrollTo(0,0); }, [state]);
 
   const handleFile = async (file: File) => {
-    setState("analyzing"); setStep(0); setErrorMsg(""); setComposedUrl(null); setProducts(null); setWaitingFacts([]);
+    setState("analyzing"); setStep(0); setErrorMsg(""); setComposedUrl(null); setProducts(null); setWaitingFacts([]); setPlanningFacts([]);
     try {
       const dataUrl = await compressImage(file);
       setPhotoDataUrl(dataUrl);
@@ -470,6 +501,14 @@ export default function Home() {
   const handleDesign = async () => {
     if (!blueprintUrl) return;
     setState("planning");
+
+    const factsPromise = fetch("/api/facts", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style }),
+    }).then(r=>r.json()).then(d=>d.facts as string[]).catch(()=>[] as string[]);
+
+    factsPromise.then(facts => { if (facts.length) setPlanningFacts(facts); });
+
     let dallePrompt = "";
     try {
       const res = await fetch("/api/plan", {
@@ -510,15 +549,15 @@ export default function Home() {
 
   const handleReset = () => {
     setState("idle"); setAnalysis(null); setPhotoDataUrl(null); setErrorMsg("");
-    setBlueprintUrl(null); setComposedUrl(null); setProducts(null); setWaitingFacts([]);
+    setBlueprintUrl(null); setComposedUrl(null); setProducts(null); setWaitingFacts([]); setPlanningFacts([]);
     setAppError(null); blueprintPromiseRef.current = null;
     setUserData({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
     if (fileRef.current) fileRef.current.value = "";
   };
 
   if (state==="analyzing")  return <LoadingScreen step={step} />;
-  if (state==="waiting")    return <TipsScreen title="המרפסת שלך בתכנון" subtitle="עוד רגע קט והכל יהיה מוכן" facts={[]} />;
-  if (state==="planning")   return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={[]} />;
+  if (state==="waiting")    return <TipsScreen title="המרפסת שלך בתכנון" subtitle="עוד רגע קט והכל יהיה מוכן" facts={NURSERY_FACTS} />;
+  if (state==="planning")   return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={planningFacts.length ? planningFacts : NURSERY_FACTS} />;
   if (state==="composing")  return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts} />;
   if (state==="order")      return <OrderScreen />;
   if (state==="error")      return <ErrorScreen error={appError??{ message:errorMsg||"unknown error" }} onReset={handleReset} />;
