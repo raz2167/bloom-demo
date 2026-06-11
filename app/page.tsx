@@ -179,7 +179,7 @@ function ConfirmScreen({ photoDataUrl, analysis, userData, setUserData, onNext }
           </Card>
         )}
         <Card>
-          <SectionTitle>מידות המרפסת — תקן אם צריך</SectionTitle>
+          <SectionTitle>מידות המרפסת - תקן אם צריך</SectionTitle>
           <Slider label="רוחב" value={userData.width_m} min={1} max={12} step={0.5} unit="מ׳" onChange={v=>setUserData({...userData,width_m:v})} />
           <Slider label="עומק" value={userData.depth_m} min={0.5} max={6} step={0.5} unit="מ׳" onChange={v=>setUserData({...userData,depth_m:v})} />
           <div style={{ background:"#F5F0E8", borderRadius:"10px", padding:"10px 14px", fontSize:"12px", color:"#8B7D6B", textAlign:"center" }}>
@@ -326,7 +326,7 @@ function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl
             </div>
           ))}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:"14px", paddingTop:"14px", borderTop:"2px solid #1A1714" }}>
-            <span style={{ fontSize:"15px", fontWeight:"700", color:"#1A1714" }}>סה"כ לתשלום</span>
+            <span style={{ fontSize:"15px", fontWeight:"700", color:"#1A1714" }}>סה״כ לתשלום</span>
             <span style={{ fontSize:"18px", fontWeight:"700", color:"#1A1714" }}>₪{products.grandTotal}</span>
           </div>
         </Card>
@@ -503,7 +503,7 @@ export default function Home() {
   const handleDesign = async () => {
     if (!blueprintUrl) return;
 
-    // שלב א — plan (קלוד מתכנן)
+    // שלב א - plan (קלוד מתכנן)
     setState("planning");
     let dallePrompt = "";
     try {
@@ -526,7 +526,7 @@ export default function Home() {
       setState("error"); return;
     }
 
-    // שלב ב — compose (DALL-E מצייר)
+    // שלב ב - compose (DALL-E מצייר)
     setState("composing");
     try {
       const res = await fetch("/api/compose", {
