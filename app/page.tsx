@@ -278,7 +278,7 @@ function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; erro
   );
 }
 
-Blueprint 
+//Blueprint 
 function BlueprintScreen({ blueprintUrl, photoDataUrl, onDesign, onReset }: { blueprintUrl:string; photoDataUrl:string; onDesign:()=>void; onReset:()=>void }) {
   return (
     <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
@@ -305,7 +305,7 @@ function BlueprintScreen({ blueprintUrl, photoDataUrl, onDesign, onReset }: { bl
   );
 }
 
-Result 
+//Result 
 function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl:string; products:Products; onOrder:()=>void; onReset:()=>void }) {
   return (
     <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
@@ -338,7 +338,7 @@ function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl
   );
 }
 
-Error screen 
+//Error screen 
 function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void }) {
   const [showLog, setShowLog] = useState(false);
   return (
@@ -401,7 +401,7 @@ function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void 
   );
 }
 
-Order confirmation 
+//Order confirmation 
 function OrderScreen() {
   return (
     <div dir="rtl" style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#FAF7F2", padding:"40px 24px", fontFamily:"sans-serif", textAlign:"center" }}>
@@ -415,7 +415,7 @@ function OrderScreen() {
   );
 }
 
-Main 
+//Main 
 export default function Home() {
   const [state,        setState]        = useState<AppState>("idle");
   const [step,         setStep]         = useState(0);
