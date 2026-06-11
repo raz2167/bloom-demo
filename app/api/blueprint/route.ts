@@ -1,7 +1,7 @@
 // app/api/blueprint/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const BLUEPRINT_PROMPT = `
 You are editing a balcony photo. Follow these two steps in order:
