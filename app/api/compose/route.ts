@@ -40,13 +40,15 @@ export async function POST(req: NextRequest) {
 
     L("[4] building FormData");
     const fd = new FormData();
-    fd.append("model",   "gpt-image-2");
-    fd.append("image[]", new Blob([new Uint8Array(bpBuf)], { type: "image/png" }), "blueprint.png");
-    fd.append("prompt",  finalPrompt);
-    fd.append("n",       "1");
-    fd.append("size",    "1024x1024");
+    fd.append("model",         "gpt-image-2");
+    fd.append("image[]",       new Blob([new Uint8Array(bpBuf)], { type: "image/png" }), "blueprint.png");
+    fd.append("prompt",        finalPrompt);
+    fd.append("n",             "1");
+    fd.append("size",          "1024x1024");
+    fd.append("quality",       "medium");
+    fd.append("output_format", "jpeg");
 
-    L("[5] calling DALL-E edits");
+    L("[5] calling DALL-E (quality=medium, format=jpeg)");
     const dr = await fetch("https://api.openai.com/v1/images/edits", {
       method:  "POST",
       headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
       const b64 = dd.data[0].b64_json as string;
       L("[8] returning b64, length: " + b64.length);
       return new Response(
-        JSON.stringify({ imageUrl: "data:image/png;base64," + b64, debug: { log } }),
+        JSON.stringify({ imageUrl: "data:image/jpeg;base64," + b64, debug: { log } }),
         { headers: { "Content-Type": "application/json" } }
       );
     }
