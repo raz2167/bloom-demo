@@ -41,13 +41,14 @@ export async function POST(req: NextRequest) {
 
     L("[3] building FormData");
     const fd = new FormData();
-    fd.append("model",   "gpt-image-2");
-    fd.append("image[]", new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), "balcony." + ext);
-    fd.append("prompt",  BLUEPRINT_PROMPT);
-    fd.append("n",       "1");
-    fd.append("size",    "1024x1024");
+    fd.append("model",         "gpt-image-2");
+    fd.append("image[]",       new Blob([new Uint8Array(imgBuffer)], { type: mimeType }), "balcony." + ext);
+    fd.append("prompt",        BLUEPRINT_PROMPT);
+    fd.append("n",             "1");
+    fd.append("size",          "1024x1024");
+    fd.append("quality",       "low");
 
-    L("[4] calling DALL-E");
+    L("[4] calling DALL-E (quality=low)");
     const dalleRes = await fetch("https://api.openai.com/v1/images/edits", {
       method:  "POST",
       headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
