@@ -58,18 +58,26 @@ RULES:
 - Planter color from: anthracite, light gray, terracotta, sand/beige (match balcony colors)
 - waitingFacts in Hebrew only, plain text, no special characters
 
-CRITICAL - FLOOR PLACEMENT:
+CRITICAL - FLOOR PLACEMENT AND ORIENTATION:
 All planters stand ON THE FLOOR. They do NOT sit on top of the railing or wall.
-The correct visual: planters are on the floor pushed against the back wall, with the railing visible BEHIND and ABOVE them.
-In the blueprint image the railing appears as horizontal lines near the TOP of the image. Planters must appear in the LOWER HALF of the image, standing on the floor surface.
+The correct visual: planters are flush against the back wall, touching it, with the railing visible BEHIND and ABOVE them.
+In the blueprint image the railing appears as horizontal lines near the TOP of the image. Planters must appear in the LOWER HALF of the image.
+
+ORIENTATION: Each planter must be placed with its LONG SIDE (60cm) running PARALLEL to the back wall.
+This means the planter runs left-to-right along the wall, NOT front-to-back (sticking out into the balcony).
+The 30cm depth faces toward the viewer. Think of a window box mounted along a wall.
+
+POSITION: Every planter must be FLUSH against the back wall - touching it, no gap.
+They should not float in the middle of the balcony floor.
 
 CRITICAL - dallePrompt construction:
 The image DALL-E receives is a BLACK AND WHITE ARCHITECTURAL LINE DRAWING.
 Your dallePrompt MUST:
 1. Start with: "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing:"
-2. Explicitly state that planters are STANDING ON THE FLOOR, pushed against the back wall, with the railing visible behind and above them.
-3. Explicitly state that planters appear in the LOWER portion of the image.
-4. Describe: exactly ${planterCount} planters evenly spaced, their color, and the lush plants inside each one.
+2. Explicitly state: planters are FLUSH AGAINST THE BACK WALL, touching it, their long 60cm side running parallel to the wall (like window boxes along a wall).
+3. Explicitly state: planters are NOT sticking out into the balcony, NOT floating in the middle of the floor.
+4. Explicitly state: planters appear in the UPPER-LOWER portion of the image, just in front of where the wall meets the floor.
+5. Describe: exactly ${planterCount} planters evenly spaced along the full width, their color, and the lush plants inside each one.
 Do NOT describe a photorealistic scene. The background stays as the line drawing.
 
 Return ONLY valid JSON, no markdown:
@@ -80,14 +88,14 @@ Return ONLY valid JSON, no markdown:
   "planterColorHe": "אפור אנתרציט",
   "perspective": { "vanishingPointDescription": "...", "floorAngle": "...", "railingPosition": "top portion of image", "depthCue": "..." },
   "planters": [{ "id": 1, "position": "evenly spaced along back wall", "rotation": "parallel to railing", "plants": [{ "nameHe": "לבנדר", "nameEn": "lavender", "count": 2, "size": "medium", "description": "purple flowering lavender 30cm tall" }], "fillMix": { "soilPct": 60, "perlitePct": 20, "tuffPct": 20 } }],
-  "dallePrompt": "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing: Place exactly ${planterCount} rectangular planters (60x30x30cm) standing on the floor, evenly spaced along the back wall, with the railing clearly visible BEHIND and ABOVE the planters. The planters appear in the LOWER HALF of the image. [CONTINUE WITH COLOR AND PLANT DETAILS]",
+  "dallePrompt": "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing: Place exactly ${planterCount} rectangular planters (60x30x30cm) flush against the back wall, touching it, their long 60cm side running parallel to the wall like window boxes. They are NOT sticking out into the balcony. Evenly spaced across the full width of the balcony. The railing is visible above and behind them. [CONTINUE WITH COLOR AND PLANT DETAILS]",
   "waitingFacts": ["fact1", "fact2", "fact3", "fact4", "fact5"]
 }`;
 
     L("[3] calling Claude Vision");
     const response = await client.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 4000,
+      max_tokens: 2000,
       system: "You are a professional garden designer. Respond ONLY with valid JSON, no markdown, no text outside JSON.",
       messages: [{ role: "user", content: [
         { type: "image", source: { type: "base64", media_type: "image/png", data: blueprintBase64 } },
