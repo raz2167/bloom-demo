@@ -32,6 +32,10 @@ export async function POST(req: NextRequest) {
     if (!blueprintUrl)                  return NextResponse.json({ error: "missing blueprintUrl",  step: "validate", debug: { log } }, { status: 400 });
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "missing Anthropic key", step: "validate", debug: { log } }, { status: 500 });
 
+    // Calculate planter count from balcony width: one planter per 90cm (60cm planter + 30cm gap)
+    const planterCount = Math.min(8, Math.max(2, Math.floor(width_m / 0.9)));
+    L("[1] calculated planterCount: " + planterCount + " for width " + width_m + "m");
+
     L("[2] extracting blueprint base64");
     const blueprintBase64 = await getBlueprintBase64(blueprintUrl);
     L("[2] base64 length: " + blueprintBase64.length);
@@ -43,9 +47,10 @@ export async function POST(req: NextRequest) {
 BALCONY: ${width_m}m x ${depth_m}m, faces ${direction}, ${sun_pct}% sun, style=${garden_style}
 COLORS: floor=${floor_color}, walls=${wall_color}, railing=${railing_color}
 PLANTER: rectangular 60x30x30cm, 43.2L usable
+PLANTER COUNT: exactly ${planterCount} planters (pre-calculated, do not change this number)
 
 RULES:
-- Planters: 2 for 2-3m wide, 3 for 3-5m, L-shape for >5m
+- Use exactly ${planterCount} planters, evenly spaced along the back wall
 - Plants must look established (2-3 seasons old, full and lush)
 - Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia
 - Mediterranean: lavender/rosemary/thyme. Modern: grasses/succulents. Jungle: coleus/caladium/ferns
@@ -53,23 +58,29 @@ RULES:
 - Planter color from: anthracite, light gray, terracotta, sand/beige (match balcony colors)
 - waitingFacts in Hebrew only, plain text, no special characters
 
-CRITICAL - dallePrompt construction rules:
-The blueprint image DALL-E receives is a BLACK AND WHITE ARCHITECTURAL LINE DRAWING.
-The dallePrompt you generate MUST:
-1. Start with this exact sentence: "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing:"
-2. Then describe in detail: exact planter count, positions along the railing, planter color, and the plants inside each planter with their full lush appearance.
-3. The intended result is: the original black and white blueprint with colored 3D planters and plants placed on top of it.
-Do NOT write a prompt that describes a photorealistic balcony scene. The background must remain the line drawing.
+CRITICAL - FLOOR PLACEMENT:
+All planters stand ON THE FLOOR. They do NOT sit on top of the railing or wall.
+The correct visual: planters are on the floor pushed against the back wall, with the railing visible BEHIND and ABOVE them.
+In the blueprint image the railing appears as horizontal lines near the TOP of the image. Planters must appear in the LOWER HALF of the image, standing on the floor surface.
+
+CRITICAL - dallePrompt construction:
+The image DALL-E receives is a BLACK AND WHITE ARCHITECTURAL LINE DRAWING.
+Your dallePrompt MUST:
+1. Start with: "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing:"
+2. Explicitly state that planters are STANDING ON THE FLOOR, pushed against the back wall, with the railing visible behind and above them.
+3. Explicitly state that planters appear in the LOWER portion of the image.
+4. Describe: exactly ${planterCount} planters evenly spaced, their color, and the lush plants inside each one.
+Do NOT describe a photorealistic scene. The background stays as the line drawing.
 
 Return ONLY valid JSON, no markdown:
 {
-  "planterCount": 2,
+  "planterCount": ${planterCount},
   "layout": "line",
   "planterColor": "anthracite gray",
   "planterColorHe": "אפור אנתרציט",
-  "perspective": { "vanishingPointDescription": "...", "floorAngle": "...", "railingPosition": "...", "depthCue": "..." },
-  "planters": [{ "id": 1, "position": "left third", "rotation": "parallel to railing", "plants": [{ "nameHe": "לבנדר", "nameEn": "lavender", "count": 2, "size": "medium", "description": "purple flowering lavender 30cm tall" }], "fillMix": { "soilPct": 60, "perlitePct": 20, "tuffPct": 20 } }],
-  "dallePrompt": "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing: [YOUR DETAILED PLANTER AND PLANT DESCRIPTION HERE]",
+  "perspective": { "vanishingPointDescription": "...", "floorAngle": "...", "railingPosition": "top portion of image", "depthCue": "..." },
+  "planters": [{ "id": 1, "position": "evenly spaced along back wall", "rotation": "parallel to railing", "plants": [{ "nameHe": "לבנדר", "nameEn": "lavender", "count": 2, "size": "medium", "description": "purple flowering lavender 30cm tall" }], "fillMix": { "soilPct": 60, "perlitePct": 20, "tuffPct": 20 } }],
+  "dallePrompt": "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing: Place exactly ${planterCount} rectangular planters (60x30x30cm) standing on the floor, evenly spaced along the back wall, with the railing clearly visible BEHIND and ABOVE the planters. The planters appear in the LOWER HALF of the image. [CONTINUE WITH COLOR AND PLANT DETAILS]",
   "waitingFacts": ["fact1", "fact2", "fact3", "fact4", "fact5"]
 }`;
 
@@ -100,12 +111,14 @@ Return ONLY valid JSON, no markdown:
       return NextResponse.json({ error: "invalid JSON from Claude", step: "json_parse", debug: { log } }, { status: 500 });
     }
 
-    L("[4] plan: " + plan.planterCount + " planters");
+    // Enforce calculated planterCount regardless of what Claude returned
+    plan.planterCount = planterCount;
+    L("[4] plan: " + planterCount + " planters (enforced)");
 
     L("[5] calculating products");
     const items: { name: string; qty: number; unitPrice: number; total: number }[] = [];
 
-    items.push({ name: "אדנית מלבנית 60x30x30 סמ (" + plan.planterColorHe + ")", qty: plan.planterCount as number, unitPrice: PRICES.adanit_unit, total: (plan.planterCount as number) * PRICES.adanit_unit });
+    items.push({ name: "אדנית מלבנית 60x30x30 סמ (" + plan.planterColorHe + ")", qty: planterCount, unitPrice: PRICES.adanit_unit, total: planterCount * PRICES.adanit_unit });
 
     const allPlants: PlantItem[] = [];
     (plan.planters as PlanterItem[]).forEach(p => p.plants.forEach(pl => allPlants.push(pl)));
