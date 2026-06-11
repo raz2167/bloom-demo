@@ -2,7 +2,7 @@
 // app/page.tsx
 import { useState, useRef, useEffect } from "react";
 
-type AppState = "idle"|"analyzing"|"confirm"|"details"|"waiting"|"blueprint"|"planning"|"composing"|"result"|"order"|"error";
+type AppState = "idle"|"analyzing"|"confirm"|"details"|"waiting"|"planning"|"composing"|"result"|"order"|"error";
 
 interface Analysis {
   width_m?: number; depth_m?: number;
@@ -104,6 +104,23 @@ function Spinner({ emoji }: { emoji:string }) {
   );
 }
 
+function NurseryFactsTicker() {
+  const [idx, setIdx] = useState(0);
+  const [vis, setVis] = useState(true);
+  useEffect(()=>{
+    const t = setInterval(()=>{
+      setVis(false);
+      setTimeout(()=>{ setIdx(i=>(i+1)%NURSERY_FACTS.length); setVis(true); }, 400);
+    }, 5000);
+    return ()=>clearInterval(t);
+  }, []);
+  return (
+    <p style={{ margin:0, color:"rgba(250,248,245,0.8)", fontSize:"14px", lineHeight:"1.7", textAlign:"center", fontWeight:"300", opacity:vis?1:0, transition:"opacity 0.3s" }}>
+      {NURSERY_FACTS[idx]}
+    </p>
+  );
+}
+
 function TipsScreen({ title, subtitle, facts }: { title:string; subtitle:string; facts:string[] }) {
   const [idx, setIdx] = useState(0);
   const [vis, setVis] = useState(true);
@@ -155,28 +172,11 @@ function LoadingScreen({ step }: { step:number }) {
           );
         })}
       </div>
-      <div style={{ width:"100%", maxWidth:"320px", marginTop:"32px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(122,168,112,0.2)", borderRadius:"16px", padding:"20px", minHeight:"100px" }}>
+      <div style={{ width:"100%", maxWidth:"320px", marginTop:"32px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(122,168,112,0.2)", borderRadius:"16px", padding:"20px", minHeight:"80px" }}>
         <div style={{ fontSize:"28px", marginBottom:"10px", textAlign:"center" }}>🌱</div>
         <NurseryFactsTicker />
       </div>
     </div>
-  );
-}
-
-function NurseryFactsTicker() {
-  const [idx, setIdx] = useState(0);
-  const [vis, setVis] = useState(true);
-  useEffect(()=>{
-    const t = setInterval(()=>{
-      setVis(false);
-      setTimeout(()=>{ setIdx(i=>(i+1)%NURSERY_FACTS.length); setVis(true); }, 400);
-    }, 5000);
-    return ()=>clearInterval(t);
-  }, []);
-  return (
-    <p style={{ margin:0, color:"rgba(250,248,245,0.8)", fontSize:"14px", lineHeight:"1.7", textAlign:"center", fontWeight:"300", opacity:vis?1:0, transition:"opacity 0.3s" }}>
-      {NURSERY_FACTS[idx]}
-    </p>
   );
 }
 
@@ -262,7 +262,7 @@ function DetailsScreen({ userData, setUserData, onNext }: { userData:UserData; s
             ))}
           </div>
         </Card>
-        <PrimaryButton label="המשך ←" onClick={onNext} disabled={!ok} />
+        <PrimaryButton label="עצב לי גינה ←" onClick={onNext} disabled={!ok} />
         {!ok&&<p style={{ textAlign:"center", fontSize:"11px", color:"#C4B8A8", marginTop:"8px" }}>יש למלא את כל השדות</p>}
       </div>
     </div>
@@ -301,32 +301,6 @@ function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; erro
   );
 }
 
-function BlueprintScreen({ blueprintUrl, photoDataUrl, onDesign, onReset }: { blueprintUrl:string; photoDataUrl:string; onDesign:()=>void; onReset:()=>void }) {
-  return (
-    <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
-      <Header subtitle="שרטוט המרפסת" />
-      <div style={{ padding:"16px" }}>
-        <p style={{ margin:"0 0 8px", fontSize:"12px", color:"#8B7D6B", fontWeight:"600" }}>המרפסת שלך</p>
-        <div style={{ marginBottom:"16px", borderRadius:"16px", overflow:"hidden", boxShadow:"0 6px 24px rgba(0,0,0,0.12)" }}>
-          <img src={photoDataUrl} alt="מקורית" style={{ width:"100%", display:"block" }} />
-        </div>
-        <p style={{ margin:"0 0 8px", fontSize:"12px", color:"#8B7D6B", fontWeight:"600" }}>השרטוט האדריכלי</p>
-        <div style={{ marginBottom:"14px", borderRadius:"16px", overflow:"hidden", boxShadow:"0 6px 24px rgba(0,0,0,0.12)" }}>
-          <img src={blueprintUrl} alt="שרטוט" style={{ width:"100%", display:"block" }} />
-        </div>
-        <Card>
-          <p style={{ margin:0, color:"#8B7D6B", fontSize:"13px", lineHeight:"1.7", textAlign:"center" }}>
-            ✦ קלוד יתכנן את הגינה המושלמת עבורך
-          </p>
-        </Card>
-        <PrimaryButton label="עצב לי גינה ←" onClick={onDesign} />
-        <div style={{ height:"12px" }} />
-        <button onClick={onReset} style={{ width:"100%", padding:"14px", background:"transparent", color:"#8B7D6B", border:"1px solid rgba(139,125,107,0.25)", borderRadius:"12px", fontSize:"13px", cursor:"pointer", fontFamily:"sans-serif" }}>← התחל מחדש</button>
-      </div>
-    </div>
-  );
-}
-
 function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl:string; products:Products; onOrder:()=>void; onReset:()=>void }) {
   return (
     <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
@@ -341,7 +315,7 @@ function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl
             <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<products.items.length-1?"1px solid rgba(139,125,107,0.1)":"none" }}>
               <div>
                 <div style={{ fontSize:"13px", color:"#1A1714", fontWeight:"500" }}>{item.name}</div>
-                <div style={{ fontSize:"11px", color:"#8B7D6B", marginTop:"2px" }}>{item.qty} x ₪{item.unitPrice}</div>
+                <div style={{ fontSize:"11px", color:"#8B7D6B", marginTop:"2px" }}>{item.qty} x {item.unitPrice}</div>
               </div>
               <div style={{ fontSize:"14px", fontWeight:"600", color:"#1A1714" }}>₪{item.total}</div>
             </div>
@@ -353,7 +327,7 @@ function ResultScreen({ composedUrl, products, onOrder, onReset }: { composedUrl
         </Card>
         <PrimaryButton label="לתשלום ←" onClick={onOrder} />
         <div style={{ height:"12px" }} />
-        <button onClick={onReset} style={{ width:"100%", padding:"14px", background:"transparent", color:"#8B7D6B", border:"1px solid rgba(139,125,107,0.25)", borderRadius:"12px", fontSize:"13px", cursor:"pointer", fontFamily:"sans-serif" }}>← התחל מחדש</button>
+        <button onClick={onReset} style={{ width:"100%", padding:"14px", background:"transparent", color:"#8B7D6B", border:"1px solid rgba(139,125,107,0.25)", borderRadius:"12px", fontSize:"13px", cursor:"pointer", fontFamily:"sans-serif" }}>התחל מחדש</button>
       </div>
     </div>
   );
@@ -391,7 +365,7 @@ function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void 
           </div>
         )}
         <button onClick={onReset} style={{ width:"100%", padding:"17px", background:"#1A1714", color:"#FAF7F2", border:"none", borderRadius:"14px", fontSize:"15px", fontWeight:"600", fontFamily:"sans-serif", cursor:"pointer" }}>
-          נסה שוב ←
+          נסה שוב
         </button>
       </div>
     </div>
@@ -410,17 +384,17 @@ function OrderScreen() {
 }
 
 export default function Home() {
-  const [state,        setState]        = useState<AppState>("idle");
-  const [step,         setStep]         = useState(0);
-  const [analysis,     setAnalysis]     = useState<Analysis|null>(null);
-  const [photoDataUrl, setPhotoDataUrl] = useState<string|null>(null);
-  const [appError,     setAppError]     = useState<AppError|null>(null);
-  const [errorMsg,     setErrorMsg]     = useState("");
-  const [userData,     setUserData]     = useState<UserData>({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
-  const [blueprintUrl, setBlueprintUrl] = useState<string|null>(null);
-  const [composedUrl,  setComposedUrl]  = useState<string|null>(null);
-  const [products,     setProducts]     = useState<Products|null>(null);
-  const [waitingFacts, setWaitingFacts] = useState<string[]>([]);
+  const [state,         setState]         = useState<AppState>("idle");
+  const [step,          setStep]          = useState(0);
+  const [analysis,      setAnalysis]      = useState<Analysis|null>(null);
+  const [photoDataUrl,  setPhotoDataUrl]  = useState<string|null>(null);
+  const [appError,      setAppError]      = useState<AppError|null>(null);
+  const [errorMsg,      setErrorMsg]      = useState("");
+  const [userData,      setUserData]      = useState<UserData>({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
+  const [blueprintUrl,  setBlueprintUrl]  = useState<string|null>(null);
+  const [composedUrl,   setComposedUrl]   = useState<string|null>(null);
+  const [products,      setProducts]      = useState<Products|null>(null);
+  const [waitingFacts,  setWaitingFacts]  = useState<string[]>([]);
   const [planningFacts, setPlanningFacts] = useState<string[]>([]);
 
   const blueprintPromiseRef = useRef<Promise<string|null>|null>(null);
@@ -429,7 +403,8 @@ export default function Home() {
   useEffect(()=>{ window.scrollTo(0,0); }, [state]);
 
   const handleFile = async (file: File) => {
-    setState("analyzing"); setStep(0); setErrorMsg(""); setComposedUrl(null); setProducts(null); setWaitingFacts([]); setPlanningFacts([]);
+    setState("analyzing"); setStep(0); setErrorMsg("");
+    setComposedUrl(null); setProducts(null); setWaitingFacts([]); setPlanningFacts([]);
     try {
       const dataUrl = await compressImage(file);
       setPhotoDataUrl(dataUrl);
@@ -479,27 +454,14 @@ export default function Home() {
     }
   };
 
-  const handleDetailsComplete = async () => {
-    const url = await Promise.race([
-      blueprintPromiseRef.current??Promise.resolve(null),
-      new Promise<null>(r=>setTimeout(()=>r(null),100)),
-    ]);
-    if (url) { setBlueprintUrl(url); setState("blueprint"); }
-    else {
-      setState("waiting");
-      const arrived = await blueprintPromiseRef.current;
-      if (arrived) { setBlueprintUrl(arrived); setState("blueprint"); }
-      else { setErrorMsg("blueprint failed"); setState("error"); }
-    }
-  };
-
   const getDebugLog = (data: Record<string,unknown>): string[] => {
     const debug = data.debug as Record<string,unknown>|undefined;
     return Array.isArray(debug?.log) ? debug.log as string[] : [];
   };
 
-  const handleDesign = async () => {
-    if (!blueprintUrl) return;
+  const handleDesign = async (urlOverride?: string) => {
+    const url = urlOverride ?? blueprintUrl;
+    if (!url) return;
     setState("planning");
 
     const factsPromise = fetch("/api/facts", {
@@ -513,7 +475,7 @@ export default function Home() {
     try {
       const res = await fetch("/api/plan", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ blueprintUrl, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"gray", wall_color:analysis?.wall_color??"white", railing_color:analysis?.railing_color??"gray" }),
+        body: JSON.stringify({ blueprintUrl:url, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"gray", wall_color:analysis?.wall_color??"white", railing_color:analysis?.railing_color??"gray" }),
       });
       let data: Record<string,unknown> = {};
       try { data = await res.json(); } catch { setAppError({ message:"plan: invalid JSON (status "+res.status+")", route:"/api/plan", step:"parse" }); setState("error"); return; }
@@ -525,11 +487,12 @@ export default function Home() {
       setAppError({ message:err instanceof Error?err.message:"network error", route:"/api/plan", step:"fetch" });
       setState("error"); return;
     }
+
     setState("composing");
     try {
       const res = await fetch("/api/compose", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ blueprintUrl, dallePrompt }),
+        body: JSON.stringify({ blueprintUrl:url, dallePrompt }),
       });
       if (!res.ok) {
         let errData: Record<string,unknown> = {};
@@ -547,22 +510,34 @@ export default function Home() {
     }
   };
 
+  const handleDetailsComplete = async () => {
+    setState("waiting");
+    const arrived = await blueprintPromiseRef.current;
+    if (!arrived) {
+      setAppError({ message:"blueprint generation failed", route:"/api/blueprint", step:"generate" });
+      setState("error");
+      return;
+    }
+    setBlueprintUrl(arrived);
+    await handleDesign(arrived);
+  };
+
   const handleReset = () => {
     setState("idle"); setAnalysis(null); setPhotoDataUrl(null); setErrorMsg("");
-    setBlueprintUrl(null); setComposedUrl(null); setProducts(null); setWaitingFacts([]); setPlanningFacts([]);
+    setBlueprintUrl(null); setComposedUrl(null); setProducts(null);
+    setWaitingFacts([]); setPlanningFacts([]);
     setAppError(null); blueprintPromiseRef.current = null;
     setUserData({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  if (state==="analyzing")  return <LoadingScreen step={step} />;
-  if (state==="waiting")    return <TipsScreen title="המרפסת שלך בתכנון" subtitle="עוד רגע קט והכל יהיה מוכן" facts={NURSERY_FACTS} />;
-  if (state==="planning")   return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={planningFacts.length ? planningFacts : NURSERY_FACTS} />;
-  if (state==="composing")  return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts} />;
-  if (state==="order")      return <OrderScreen />;
-  if (state==="error")      return <ErrorScreen error={appError??{ message:errorMsg||"unknown error" }} onReset={handleReset} />;
+  if (state==="analyzing") return <LoadingScreen step={step} />;
+  if (state==="waiting")   return <TipsScreen title="מכין את השרטוט" subtitle="עוד רגע ומתחילים לתכנן" facts={NURSERY_FACTS} />;
+  if (state==="planning")  return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={planningFacts.length ? planningFacts : NURSERY_FACTS} />;
+  if (state==="composing") return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts.length ? waitingFacts : NURSERY_FACTS} />;
+  if (state==="order")     return <OrderScreen />;
+  if (state==="error")     return <ErrorScreen error={appError??{ message:errorMsg||"unknown error" }} onReset={handleReset} />;
   if (state==="result"&&composedUrl&&products) return <ResultScreen composedUrl={composedUrl} products={products} onOrder={()=>setState("order")} onReset={handleReset} />;
-  if (state==="blueprint"&&blueprintUrl&&photoDataUrl) return <BlueprintScreen blueprintUrl={blueprintUrl} photoDataUrl={photoDataUrl} onDesign={handleDesign} onReset={handleReset} />;
   if (state==="confirm"&&analysis&&photoDataUrl) return <ConfirmScreen photoDataUrl={photoDataUrl} analysis={analysis} userData={userData} setUserData={setUserData} onNext={()=>setState("details")} />;
   if (state==="details") return <DetailsScreen userData={userData} setUserData={setUserData} onNext={handleDetailsComplete} />;
   return <IdleScreen onFile={handleFile} errorMsg={errorMsg} fileRef={fileRef} />;
