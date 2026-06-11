@@ -53,6 +53,14 @@ RULES:
 - Planter color from: anthracite, light gray, terracotta, sand/beige (match balcony colors)
 - waitingFacts in Hebrew only, plain text, no special characters
 
+CRITICAL - dallePrompt construction rules:
+The blueprint image DALL-E receives is a BLACK AND WHITE ARCHITECTURAL LINE DRAWING.
+The dallePrompt you generate MUST:
+1. Start with this exact sentence: "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing:"
+2. Then describe in detail: exact planter count, positions along the railing, planter color, and the plants inside each planter with their full lush appearance.
+3. The intended result is: the original black and white blueprint with colored 3D planters and plants placed on top of it.
+Do NOT write a prompt that describes a photorealistic balcony scene. The background must remain the line drawing.
+
 Return ONLY valid JSON, no markdown:
 {
   "planterCount": 2,
@@ -61,7 +69,7 @@ Return ONLY valid JSON, no markdown:
   "planterColorHe": "אפור אנתרציט",
   "perspective": { "vanishingPointDescription": "...", "floorAngle": "...", "railingPosition": "...", "depthCue": "..." },
   "planters": [{ "id": 1, "position": "left third", "rotation": "parallel to railing", "plants": [{ "nameHe": "לבנדר", "nameEn": "lavender", "count": 2, "size": "medium", "description": "purple flowering lavender 30cm tall" }], "fillMix": { "soilPct": 60, "perlitePct": 20, "tuffPct": 20 } }],
-  "dallePrompt": "...",
+  "dallePrompt": "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing: [YOUR DETAILED PLANTER AND PLANT DESCRIPTION HERE]",
   "waitingFacts": ["fact1", "fact2", "fact3", "fact4", "fact5"]
 }`;
 
@@ -80,7 +88,7 @@ Return ONLY valid JSON, no markdown:
     L("[3] response length: " + raw.length);
 
     L("[4] parsing JSON");
-    let plan: Record<string, unknown>;
+    let plan: Record<string, unknown> = {};
     try {
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const start = cleaned.indexOf("{");
