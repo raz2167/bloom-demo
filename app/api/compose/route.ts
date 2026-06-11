@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 300;
 
+// Safety net: always prepend blueprint-preserve instruction before Claude's prompt
+const BLUEPRINT_PREFIX = "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace or redraw the floor, walls or railing. Only add the following colored elements on top of the existing line drawing: ";
+
 async function getBlueprintBuffer(blueprintUrl: string): Promise<Buffer> {
   if (blueprintUrl.startsWith("data:")) {
     const comma = blueprintUrl.indexOf(",");
@@ -30,13 +33,16 @@ export async function POST(req: NextRequest) {
     const bpBuf = await getBlueprintBuffer(blueprintUrl);
     L("[2] buffer: " + bpBuf.length + " bytes");
 
-    L("[3] prompt length: " + dallePrompt.length + " chars");
+    // Prepend blueprint-preserve prefix if not already present
+    const alreadyHasPrefix = dallePrompt.startsWith("This is a black and white architectural line drawing");
+    const finalPrompt = alreadyHasPrefix ? dallePrompt : BLUEPRINT_PREFIX + dallePrompt;
+    L("[3] prompt length: " + finalPrompt.length + " chars (prefix " + (alreadyHasPrefix ? "already present" : "added") + ")");
 
     L("[4] building FormData");
     const fd = new FormData();
     fd.append("model",   "gpt-image-2");
     fd.append("image[]", new Blob([new Uint8Array(bpBuf)], { type: "image/png" }), "blueprint.png");
-    fd.append("prompt",  dallePrompt);
+    fd.append("prompt",  finalPrompt);
     fd.append("n",       "1");
     fd.append("size",    "1024x1024");
 
