@@ -245,7 +245,7 @@ function DetailsScreen({ userData, setUserData, onNext }: { userData:UserData; s
   );
 }
 
-Idle 
+//Idle 
 function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; errorMsg:string; fileRef:React.RefObject<HTMLInputElement> }) {
   return (
     <div dir="rtl" style={{ background:"linear-gradient(180deg,#1A1714 0%,#2C2420 40%,#FAF7F2 40%)", minHeight:"100vh", fontFamily:"sans-serif" }}>
