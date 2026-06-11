@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // ── כתובות — לא לשנות ────────────────────────────────
 const COMBO_1_URL = "https://res.cloudinary.com/dvt1kqbjq/image/upload/v1780739076/%D7%90%D7%93%D7%A0%D7%99%D7%AA_3_%D7%A2%D7%9D_%D7%A6%D7%9E%D7%97%D7%99%D7%99%D7%94_n4014f.png";
