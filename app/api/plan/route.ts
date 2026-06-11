@@ -87,7 +87,7 @@ Return ONLY valid JSON, no markdown:
     L("[3] calling Claude Vision");
     const response = await client.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: "You are a professional garden designer. Respond ONLY with valid JSON, no markdown, no text outside JSON.",
       messages: [{ role: "user", content: [
         { type: "image", source: { type: "base64", media_type: "image/png", data: blueprintBase64 } },
