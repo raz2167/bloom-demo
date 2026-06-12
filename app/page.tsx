@@ -5,14 +5,13 @@ import { useState, useRef, useEffect } from "react";
 type AppState = "idle"|"analyzing"|"confirm"|"details"|"waiting"|"planning"|"composing"|"result"|"order"|"error";
 
 interface Analysis {
-  width_m?: number; depth_m?: number;
-  sun_exposure?: string; railing?: string; style?: string; notes?: string;
-  floor_color?: string; wall_color?: string; railing_color?: string;
-}
-interface Analysis {
   width_m?: number; depth_m?: number; wall_height_m?: number;
   sun_exposure?: string; railing?: string; style?: string; notes?: string;
   floor_color?: string; wall_color?: string; railing_color?: string;
+}
+interface UserData {
+  width_m: number; depth_m: number; direction: string; sun_pct: number;
+  has_drain: boolean|null; has_power: boolean|null; garden_style: string;
 }
 interface ProductItem { name: string; qty: number; unitPrice: number; total: number; }
 interface Products { items: ProductItem[]; grandTotal: number; }
@@ -452,7 +451,6 @@ export default function Home() {
       const base64 = dataUrl.split(",")[1];
       const mime   = file.type||"image/jpeg";
 
-      // Start blueprint timer and wrap promise to record duration
       blueprintStartRef.current = Date.now();
       blueprintPromiseRef.current = fetch("/api/blueprint", {
         method:"POST", headers:{"Content-Type":"application/json"},
@@ -463,7 +461,6 @@ export default function Home() {
         return (d.blueprintUrl as string)||null;
       }).catch(()=>null);
 
-      // Start analyze timer
       analyzeStartRef.current = Date.now();
       const res = await fetch("/api/analyze", {
         method:"POST", headers:{"Content-Type":"application/json"},
@@ -529,7 +526,8 @@ export default function Home() {
       const planStart = Date.now();
       const res = await fetch("/api/plan", {
         method:"POST", headers:{"Content-Type":"application/json"},
-body: JSON.stringify({ blueprintUrl:url, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"gray", wall_color:analysis?.wall_color??"white", railing_color:analysis?.railing_color??"gray", wall_height_m:analysis?.wall_height_m??2.6 }),      });
+        body: JSON.stringify({ blueprintUrl:url, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"gray", wall_color:analysis?.wall_color??"white", railing_color:analysis?.railing_color??"gray", wall_height_m:analysis?.wall_height_m??2.6 }),
+      });
       let data: Record<string,unknown> = {};
       try { data = await res.json(); } catch { setAppError({ message:"plan: invalid JSON (status "+res.status+")", route:"/api/plan", step:"parse" }); setState("error"); return; }
       if (!data.dallePrompt) { setAppError({ message:String(data.error||"no dallePrompt"), route:"/api/plan", step:String(data.step||"unknown"), log:getDebugLog(data) }); setState("error"); return; }
