@@ -1,4 +1,4 @@
-// v5 - 2026-06-12 - stronger diversity enforcement per planter, explicit prohibition of repetition
+// v6 - 2026-06-12 - fix planter shape (2:1 ratio), fix plant arrangement (side-by-side not stacked)
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -8,7 +8,7 @@ const PRICES = { adanit_unit:189, plant_small:35, plant_medium:55, plant_large:8
 const PLANTER_VOLUME_L = 43.2;
 
 interface PlantChoice { nameHe: string; nameEn: string; totalCount: number; size: string; visualDesc: string; }
-interface PlanterLayout { position: number; tall: string; mid: string; trail: string; }
+interface PlanterLayout { position: number; left: string; center: string; right: string; }
 
 const BLUEPRINT_BASE = (
   "This is a black and white architectural line drawing of a balcony. " +
@@ -18,7 +18,6 @@ const BLUEPRINT_BASE = (
   "PLACEMENT: all planters flush against the back wall, long 60cm side PARALLEL to wall like window boxes, NOT sticking into the balcony. Railing visible above and behind. "
 );
 
-// Diverse color rhythms per planter count to force variety
 const COLOR_RHYTHMS: Record<number, string> = {
   2: "planter 1: purple+white+blue; planter 2: orange+red+yellow-green",
   3: "planter 1: purple+pink+blue; planter 2: orange+yellow+lime; planter 3: white+red+silver",
@@ -53,9 +52,9 @@ export async function POST(req: NextRequest) {
       ? "Tropical jungle: coleus (bold colored leaves), caladium, asparagus fern, wandering jew, sweet potato vine, impatiens."
       : "Modern minimal: ornamental grasses, succulents, echeveria, sedum, agave, white or pale flowers.";
 
-    const sunGuide = sun_pct > 70 ? "Full sun plants only: lavender, rosemary, geranium, sage, thyme, petunia, calibrachoa, portulaca"
-      : sun_pct > 40 ? "Partial sun plants: impatiens, begonia, coleus, browallia, fuchsia, lobelia, diascia"
-      : "Shade plants only: ferns, browallia, impatiens, caladium, ivy, torenia, wishbone flower";
+    const sunGuide = sun_pct > 70 ? "Full sun: lavender, rosemary, geranium, sage, thyme, petunia, calibrachoa, portulaca"
+      : sun_pct > 40 ? "Partial sun: impatiens, begonia, coleus, browallia, fuchsia, lobelia, diascia"
+      : "Shade: ferns, browallia, impatiens, caladium, ivy, torenia";
 
     const colorRhythm = COLOR_RHYTHMS[planterCount] || COLOR_RHYTHMS[4];
 
@@ -67,35 +66,37 @@ STYLE: ${styleGuide}
 SUN: ${sunGuide}
 PLANTERS: exactly ${planterCount} rectangular 60x30x30cm planters
 
-MANDATORY COLOR DIVERSITY - follow this rhythm exactly:
+MANDATORY COLOR DIVERSITY:
 ${colorRhythm}
 
-RULES FOR EACH PLANTER (3 layers):
-- TALL (back, 35-50cm height): 1 upright focal plant - vary species AND color between planters
-- MID (center, 20-30cm): 1 mounding or flowering plant - vary species AND color between planters
-- TRAIL (front edge, cascades down): 1 trailing/cascading plant - vary species AND color between planters
+PLANT ARRANGEMENT RULES - this is critical:
+- Each planter contains 2-3 plants placed SIDE BY SIDE horizontally (not stacked vertically)
+- LEFT side of planter: 1 plant species
+- CENTER of planter: 1 plant species (can be taller)
+- RIGHT side of planter: 1 plant species (can trail over the front edge)
+- Plants grow naturally upward from the soil - they are NOT on shelves or layers
+- The visual effect is a natural garden, not a tiered display
 
 STRICT PROHIBITIONS:
-- NO two adjacent planters may have the same tall plant species
-- NO two adjacent planters may have the same color palette
-- NO monotonous rows - the viewer's eye must travel across different colors and textures
+- NO two adjacent planters may have the same species
+- NO monotonous repetition across the row
 
 Return ONLY this JSON:
 {
   "planterColorHe": "Hebrew color name",
   "planterColorEn": "anthracite gray OR terracotta OR sand beige OR slate blue",
   "plants": [
-    {"nameHe": "Hebrew name", "nameEn": "English name", "totalCount": 6, "size": "medium", "visualDesc": "color + height + form e.g. deep purple spikes 40cm upright dense"}
+    {"nameHe": "Hebrew name", "nameEn": "English name", "totalCount": 6, "size": "medium", "visualDesc": "specific: deep purple spikes 40cm"}
   ],
   "planterLayout": [
-    {"position": 1, "tall": "species, color+form 40cm", "mid": "species, color+form 25cm", "trail": "species, color cascading"},
-    {"position": 2, "tall": "DIFFERENT species, DIFFERENT color 35cm", "mid": "DIFFERENT species, DIFFERENT color", "trail": "DIFFERENT species, DIFFERENT color"}
+    {"position": 1, "left": "lobelia, blue cascading over front edge", "center": "rosemary, silvery-green upright 40cm", "right": "pink geranium, round clusters 25cm"},
+    {"position": 2, "left": "silver dichondra, trailing", "center": "lavender, purple spikes 35cm", "right": "orange calibrachoa, mounding"}
   ],
   "soilPct": 60, "perlitePct": 20, "tuffPct": 20,
   "designFacts": ["10 Hebrew facts about this specific garden, max 12 words each"]
 }
 
-planterLayout MUST have exactly ${planterCount} entries. Every entry MUST be visually different from its neighbors.`;
+planterLayout MUST have exactly ${planterCount} entries. Every planter MUST differ from neighbors.`;
 
     L("[2] calling Claude Haiku");
     const response = await client.messages.create({
@@ -116,20 +117,20 @@ planterLayout MUST have exactly ${planterCount} entries. Every entry MUST be vis
     }
     let plan: PlanResult = {
       planterColorHe: "אפור אנתרציט", planterColorEn: "anthracite gray",
-      plants: [{ nameHe: "לבנדר", nameEn: "lavender", totalCount: planterCount * 2, size: "medium", visualDesc: "purple flowering lavender 30cm tall" }],
+      plants: [{ nameHe: "לבנדר", nameEn: "lavender", totalCount: planterCount * 2, size: "medium", visualDesc: "purple flowering lavender 30cm" }],
       planterLayout: Array.from({ length: planterCount }, (_, i) => {
         const palettes = [
-          { tall:"rosemary, silvery-green upright 40cm", mid:"pink geranium, round clusters 25cm", trail:"blue lobelia, cascading waterfall" },
-          { tall:"lavender, purple spikes 35cm", mid:"orange calibrachoa, tiny star flowers", trail:"silver dichondra, flowing curtain" },
-          { tall:"ornamental grass, lime-green arching 45cm", mid:"white alyssum, honey-scented mounds", trail:"red verbena, trailing stems" },
-          { tall:"sage, blue-purple upright 40cm", mid:"coral impatiens, bright clusters", trail:"variegated ivy, cascading green-white" },
-          { tall:"coleus, burgundy-gold leaves 35cm", mid:"yellow lantana, round clusters", trail:"purple sweet potato vine, dramatic" },
-          { tall:"agapanthus, blue globe 50cm", mid:"pink diascia, airy flowers", trail:"green-gold creeping jenny" },
-          { tall:"dusty miller, silver upright 35cm", mid:"magenta petunia, trumpet flowers", trail:"yellow bidens, feathery cascade" },
-          { tall:"lemon grass, architectural 45cm", mid:"white bacopa, tiny star flowers", trail:"coral creeping zinnia" },
+          { left:"blue lobelia, cascading over edge", center:"rosemary, silvery-green upright 40cm", right:"pink geranium, round clusters 25cm" },
+          { left:"silver dichondra, trailing", center:"lavender, purple spikes 35cm", right:"orange calibrachoa, mounding" },
+          { left:"green-gold creeping jenny, trailing", center:"ornamental grass, lime arching 40cm", right:"white alyssum, mounding fragrant" },
+          { left:"red verbena, trailing stems", center:"sage, blue-purple upright 40cm", right:"coral impatiens, mounding" },
+          { left:"purple sweet potato vine, dramatic trailing", center:"coleus, burgundy-gold leaves 35cm", right:"yellow lantana, round clusters" },
+          { left:"yellow bidens, feathery cascade", center:"dusty miller, silver upright 35cm", right:"magenta petunia, trumpet flowers" },
+          { left:"coral creeping zinnia, trailing", center:"lemon grass, architectural 45cm", right:"white bacopa, tiny star flowers" },
+          { left:"variegated ivy, cascading green-white", center:"caladium, bold patterned leaves 35cm", right:"browallia, blue star flowers" },
         ];
         const p = palettes[i % palettes.length];
-        return { position: i + 1, tall: p.tall, mid: p.mid, trail: p.trail };
+        return { position: i + 1, left: p.left, center: p.center, right: p.right };
       }),
       soilPct: 60, perlitePct: 20, tuffPct: 20, designFacts: [],
     };
@@ -147,29 +148,31 @@ planterLayout MUST have exactly ${planterCount} entries. Every entry MUST be vis
     }
     L("[3] planterColor: " + plan.planterColorEn + ", layout: " + plan.planterLayout.length);
 
+    // Build per-planter description - horizontal side-by-side arrangement
     const planterDescs = plan.planterLayout.slice(0, planterCount).map((p, i) => {
       const posLabel = planterCount <= 3
         ? (i === 0 ? "left planter" : i === planterCount - 1 ? "right planter" : "center planter")
         : (i === 0 ? "leftmost planter" : i === planterCount - 1 ? "rightmost planter" : "planter " + (i + 1));
-      return posLabel + ": [back] " + p.tall + " | [center] " + p.mid + " | [cascading over front edge] " + p.trail;
+      return posLabel + ": left-side=" + p.left + ", center=" + p.center + ", right-side=" + p.right;
     }).join("; ");
 
     const proportionAnchor = (
-      "PROPORTION RULE: The back wall in this drawing is " + wallH.toFixed(1) + "m tall. " +
-      "Each planter is exactly 30cm (0.3m) tall and 60cm wide - they should occupy only " + planterHeightPct + "% of the wall height. " +
-      "Draw planters small relative to the wall. The floor and most of the wall remain clearly visible. " +
-      "Plants extend upward max 50cm above planter rim. "
+      "PROPORTION RULE: The back wall is " + wallH.toFixed(1) + "m tall. " +
+      "Each planter is a WIDE RECTANGULAR WINDOW BOX: 60cm wide and only 30cm tall (2:1 width-to-height ratio, much wider than tall). " +
+      "Planters occupy only " + planterHeightPct + "% of the wall height. " +
+      "Draw them as low wide boxes, not cubes. The floor and wall remain clearly visible. " +
+      "Plants grow upward from soil to max 50cm above planter rim. "
     );
 
     const dallePrompt = (
       BLUEPRINT_BASE +
       proportionAnchor +
-      "PLANTERS: " + planterCount + " " + plan.planterColorEn + " rectangular planters in a row, each 60cm wide x 30cm tall. " +
-      "Each planter has a UNIQUE and VISUALLY DISTINCT plant combination - different colors, heights, and textures from its neighbors. " +
-      "Plants are lush and overflowing, established, full (2-3 seasons old). " +
+      "PLANTERS: " + planterCount + " " + plan.planterColorEn + " wide rectangular window boxes in a row. " +
+      "Each box is wider than tall (60cm wide, 30cm tall). " +
+      "Plants are arranged SIDE BY SIDE within each planter, growing naturally from the soil - not stacked in layers. " +
+      "Plants are lush and full (2-3 seasons old). " +
       "ARRANGEMENT left to right: " + planterDescs + ". " +
-      "Trailing plants spill dramatically over front edges of each planter. " +
-      "The overall scene is vibrant and colorful with clear visual rhythm and variety."
+      "The overall scene is vibrant and colorful with clear visual rhythm and variety across planters."
     );
 
     L("[3] dallePrompt length: " + dallePrompt.length);
