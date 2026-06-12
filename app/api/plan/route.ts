@@ -9,24 +9,16 @@ const PLANTER_VOLUME_L = 43.2;
 
 interface PlantChoice { nameHe: string; nameEn: string; totalCount: number; size: string; visualDesc: string; }
 
-function buildDallePrompt(planterCount: number, planterColorEn: string, plants: PlantChoice[], arrangement: string): string {
-  const plantList = plants.map(p => p.visualDesc + " (" + p.nameEn + ")").join(", ");
-  return (
-    "This is a black and white architectural line drawing of a balcony. " +
-    "Preserve this line drawing exactly as the background. " +
-    "Do not replace or redraw the floor, walls or railing. " +
-    "Only add the following colored elements on top of the existing line drawing: " +
-    "Place exactly " + planterCount + " rectangular planters (60x30x30cm) in " + planterColorEn + ", " +
-    "flush against the back wall, touching it, their long 60cm side running parallel to the wall like window boxes. " +
-    "They are NOT sticking out into the balcony. " +
-    "Evenly spaced across the full width of the back wall. " +
-    "The railing is visible above and behind them. " +
-    "Plant species available: " + plantList + ". " +
-    "Visual arrangement across the planters: " + arrangement + " " +
-    "Each planter overflows with lush established plants (2-3 seasons old, full and dense). " +
-    "Plants spill naturally over the planter edges. Create clear visual variety and rhythm between planters."
-  );
-}
+const DALLE_PLACEMENT_RULES = (
+  "This is a black and white architectural line drawing of a balcony. " +
+  "Preserve this line drawing exactly as the background. " +
+  "Do not replace or redraw the floor, walls or railing. " +
+  "Only add the following colored elements on top of the existing line drawing. " +
+  "PLACEMENT RULES: planters must be flush against the back wall touching it, " +
+  "their long 60cm side running parallel to the wall like window boxes, " +
+  "NOT sticking out into the balcony, evenly spaced across the full width. " +
+  "The railing must remain visible above and behind the planters. "
+);
 
 export async function POST(req: NextRequest) {
   const log: string[] = [];
@@ -44,35 +36,33 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const userPrompt = `Garden design for a balcony. Return minimal JSON only.
+    const userPrompt = `Create a detailed garden design for a balcony. Return JSON only.
 
 BALCONY: ${width_m}m x ${depth_m}m, faces ${direction}, ${sun_pct}% sun, style=${garden_style}
 COLORS: floor=${floor_color}, walls=${wall_color}, railing=${railing_color}
-PLANTERS: ${planterCount} rectangular 60x30x30cm planters
+PLANTERS: exactly ${planterCount} rectangular 60x30x30cm planters
 
-CHOOSE:
-1. planterColorHe (Hebrew color name) and planterColorEn (English) - match balcony colors, pick from: anthracite gray, light gray, terracotta, sand beige
-2. plants - 3 to 5 species total. Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia. Mediterranean: lavender/rosemary/thyme. Modern: ornamental grasses/succulents. Jungle: coleus/caladium/ferns. Mix tall, medium and trailing/cascading species for visual interest.
-3. arrangement - one sentence describing the visual rhythm across the planters. Specify which plants go where, alternating patterns, height variation, color contrast. Example: "Alternate tall lavender centerpieces with low cascading rosemary, place red coleus as accent every third planter, trailing thyme spills over front edges."
-4. soilPct, perlitePct, tuffPct - one mix for all planters. Total must equal 100.
-5. waitingFacts - 3 facts in Hebrew about the chosen plants, plain text, no special characters
+INSTRUCTIONS:
+1. Choose planterColorHe (Hebrew) and planterColorEn (English) matching balcony colors: anthracite gray / light gray / terracotta / sand beige
+2. Choose 3-5 plant species. Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia. Mediterranean: lavender/rosemary/thyme. Modern: grasses/succulents. Jungle: coleus/caladium/ferns. Mix tall, medium and trailing/cascading species.
+3. Choose soilPct, perlitePct, tuffPct (must sum to 100). Drought-tolerant=60/20/20, flowering=70/20/10, succulents=40/40/20, shade=80/10/10.
+4. Write dallePrompt: a rich detailed description for DALL-E. Start with this exact sentence: "${DALLE_PLACEMENT_RULES}" Then describe: the ${planterCount} planters with their color, and a VARIED arrangement with specific plant combinations per planter creating visual rhythm. Vary heights (tall centerpieces + low cascading + trailing), colors, and textures across the planters. Be specific about which plant goes in which planter position. Make it lush and wow.
+5. Write designFacts: exactly 10 short Hebrew facts about THIS specific garden design. Facts about plant choices, colors, quantities, soil mix, expected bloom seasons, scents, maintenance tips. Each fact max 12 words. Plain text, no special characters.
 
-Return ONLY this JSON, nothing else:
+Return ONLY this JSON:
 {
   "planterColorHe": "...",
   "planterColorEn": "...",
-  "plants": [
-    {"nameHe": "...", "nameEn": "...", "totalCount": 4, "size": "medium", "visualDesc": "purple flowering lavender 30cm tall dense foliage"}
-  ],
-  "arrangement": "Alternate tall lavender with cascading rosemary, red coleus accent every other planter, trailing thyme over front edges.",
+  "plants": [{"nameHe": "...", "nameEn": "...", "totalCount": 4, "size": "medium", "visualDesc": "purple flowering lavender 35cm tall dense silver-green foliage"}],
   "soilPct": 60, "perlitePct": 20, "tuffPct": 20,
-  "waitingFacts": ["fact1", "fact2", "fact3"]
+  "dallePrompt": "${DALLE_PLACEMENT_RULES}[DETAILED VARIED PLANT DESCRIPTION HERE]",
+  "designFacts": ["עובדה 1", "עובדה 2", "עובדה 3", "עובדה 4", "עובדה 5", "עובדה 6", "עובדה 7", "עובדה 8", "עובדה 9", "עובדה 10"]
 }`;
 
-    L("[2] calling Claude Haiku (minimal output)");
+    L("[2] calling Claude Haiku");
     const response = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 1000,
+      max_tokens: 2500,
       system: "You are a professional garden designer. Respond ONLY with valid JSON, no markdown, no text outside JSON.",
       messages: [{ role: "user", content: userPrompt }],
     });
@@ -81,12 +71,12 @@ Return ONLY this JSON, nothing else:
     L("[2] response length: " + raw.length);
 
     L("[3] parsing JSON");
-    let plan: { planterColorHe: string; planterColorEn: string; plants: PlantChoice[]; arrangement: string; soilPct: number; perlitePct: number; tuffPct: number; waitingFacts: string[] } = {
+    let plan: { planterColorHe: string; planterColorEn: string; plants: PlantChoice[]; soilPct: number; perlitePct: number; tuffPct: number; dallePrompt: string; designFacts: string[] } = {
       planterColorHe: "אפור אנתרציט", planterColorEn: "anthracite gray",
       plants: [{ nameHe: "לבנדר", nameEn: "lavender", totalCount: planterCount * 2, size: "medium", visualDesc: "purple flowering lavender 30cm tall" }],
-      arrangement: "Alternate tall lavender with low cascading rosemary across planters, varying heights for visual rhythm.",
       soilPct: 60, perlitePct: 20, tuffPct: 20,
-      waitingFacts: [],
+      dallePrompt: DALLE_PLACEMENT_RULES + "Place " + planterCount + " anthracite planters with lavender and rosemary, lush and full.",
+      designFacts: [],
     };
     try {
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
@@ -96,15 +86,11 @@ Return ONLY this JSON, nothing else:
       const parsed = JSON.parse(cleaned.slice(start, end + 1));
       plan = { ...plan, ...parsed };
     } catch (parseErr) {
-      L("[3] parse error: " + parseErr + " — using defaults");
+      L("[3] parse error: " + parseErr + " using defaults");
     }
-    L("[3] plan: " + plan.planterColorEn + ", " + plan.plants.length + " species");
+    L("[3] plan: " + plan.planterColorEn + ", " + plan.plants.length + " species, facts: " + plan.designFacts.length);
 
-    L("[4] building dallePrompt server-side");
-    const dallePrompt = buildDallePrompt(planterCount, plan.planterColorEn, plan.plants, plan.arrangement);
-    L("[4] prompt length: " + dallePrompt.length);
-
-    L("[5] calculating products");
+    L("[4] calculating products");
     const items: { name: string; qty: number; unitPrice: number; total: number }[] = [];
     items.push({ name: "אדנית מלבנית 60x30x30 סמ (" + plan.planterColorHe + ")", qty: planterCount, unitPrice: PRICES.adanit_unit, total: planterCount * PRICES.adanit_unit });
 
@@ -126,9 +112,14 @@ Return ONLY this JSON, nothing else:
     if (tuffBags > 0)    items.push({ name: "טוף שק 10 ליטר",            qty: tuffBags,    unitPrice: Math.round(PRICES.tuff_liter    * 10), total: tuffBags    * Math.round(PRICES.tuff_liter    * 10) });
 
     const grandTotal = items.reduce((s, i) => s + i.total, 0);
-    L("[5] total: " + grandTotal + " ILS, " + items.length + " items");
+    L("[4] total: " + grandTotal + " ILS, " + items.length + " items");
 
-    return NextResponse.json({ dallePrompt, waitingFacts: plan.waitingFacts ?? [], products: { items, grandTotal }, debug: { log } });
+    return NextResponse.json({
+      dallePrompt: plan.dallePrompt,
+      waitingFacts: plan.designFacts ?? [],
+      products: { items, grandTotal },
+      debug: { log }
+    });
 
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : String(err);
