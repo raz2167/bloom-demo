@@ -288,7 +288,7 @@ function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; erro
   return (
     <div dir="rtl" style={{ background:"linear-gradient(180deg,#1A1714 0%,#2C2420 40%,#FAF7F2 40%)", minHeight:"100vh", fontFamily:"sans-serif" }}>
       <div style={{ textAlign:"center", padding:"52px 24px 60px", color:"#FAF7F2" }}>
-        <div style={{ fontSize:"10px", letterSpacing:"4px", opacity:0.35, marginBottom:"14px" }}>H I B L O O M</div>
+        <div style={{ fontSize:"10px", letterSpacing:"4px", opacity:0.35, marginBottom:"14px" }}>מ ש ת ל ת  ר ז</div>
         <h1 style={{ margin:"0 0 10px", fontSize:"34px", fontWeight:"200", letterSpacing:"-1px", lineHeight:1.1 }}>הגינה שתמיד<br />דמיינת</h1>
         <p style={{ margin:0, fontSize:"14px", opacity:0.4, fontWeight:"300" }}>צלם את המרפסת שלך</p>
       </div>
@@ -310,7 +310,7 @@ function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; erro
             ))}
           </div>
         </div>
-        <p style={{ textAlign:"center", color:"rgba(139,125,107,0.3)", fontSize:"10px", marginTop:"18px", letterSpacing:"2px" }}>משתלת רז · BALCONY DESIGN</p>
+        <p style={{ textAlign:"center", color:"rgba(139,125,107,0.3)", fontSize:"10px", marginTop:"18px", letterSpacing:"2px" }}>משתלת רז · Powered by Bloom</p>
       </div>
     </div>
   );
@@ -415,7 +415,7 @@ function OrderScreen({ timings }: { timings: Timings | null }) {
           </div>
         </div>
       )}
-      <p style={{ fontSize:"11px", color:"#C4B8A8", marginTop:"24px", letterSpacing:"2px" }}>משתלת רז · BALCONY DESIGN</p>
+      <p style={{ fontSize:"11px", color:"#C4B8A8", marginTop:"24px", letterSpacing:"2px" }}>משתלת רז · Powered by Bloom</p>
     </div>
   );
 }
