@@ -550,20 +550,40 @@ export default function Home() {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ blueprintUrl:url, dallePrompt }),
       });
-      if (!res.ok) {
-        let errData: Record<string,unknown> = {};
-        try { errData = await res.json(); } catch { /* ignore */ }
-        setAppError({ message:String(errData.error||"compose status "+res.status), route:"/api/compose", step:String(errData.step||"http"), log:getDebugLog(errData) });
+      if (!res.ok || !res.body) {
+        setAppError({ message:"compose status " + res.status, route:"/api/compose", step:"http" });
         setState("error"); return;
       }
-      let data: Record<string,unknown> = {};
-      try { data = await res.json(); } catch { setAppError({ message:"compose: invalid JSON", route:"/api/compose", step:"parse" }); setState("error"); return; }
-      if (data.imageUrl) {
-        const composeMs = Date.now() - composeStart;
-        setTimings(prev => prev ? { ...prev, composeMs } : { analyzeMs:0, blueprintMs:0, planMs:0, composeMs });
-        setComposedUrl(data.imageUrl as string); setState("result");
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      let lastPartialUrl: string|null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream:true });
+        const lines = buf.split("\n"); buf = lines.pop()??"";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          let ev: Record<string,unknown> = {};
+          try { ev = JSON.parse(line.slice(6).trim()); } catch { continue; }
+          if (ev.type === "partial" && ev.imageUrl) {
+            lastPartialUrl = ev.imageUrl as string;
+            setComposedUrl(lastPartialUrl);
+          }
+          if (ev.type === "done") {
+            const composeMs = Date.now() - composeStart;
+            setTimings(prev => prev ? { ...prev, composeMs } : { analyzeMs:0, blueprintMs:0, planMs:0, composeMs });
+            const finalUrl = (ev.imageUrl as string|null) ?? lastPartialUrl;
+            if (finalUrl) { setComposedUrl(finalUrl); setState("result"); }
+            else { setAppError({ message:"no imageUrl in compose response", route:"/api/compose", step:"done", log:ev.log as string[] }); setState("error"); }
+          }
+          if (ev.type === "error") {
+            setAppError({ message:String(ev.message||"compose error"), route:"/api/compose", step:"stream", log:ev.log as string[] });
+            setState("error");
+          }
+        }
       }
-      else { setAppError({ message:String(data.error||"no imageUrl"), route:"/api/compose", step:String(data.step||"unknown"), log:getDebugLog(data) }); setState("error"); }
     } catch (err: unknown) {
       setAppError({ message:err instanceof Error?err.message:"network error", route:"/api/compose", step:"fetch" });
       setState("error");
