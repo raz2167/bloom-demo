@@ -1,5 +1,5 @@
 "use client";
-// app/page.tsx
+// v6 - 2026-06-12 - add wall_height_m slider to ConfirmScreen; pass wall_height_m from userData (not analysis)
 import { useState, useRef, useEffect } from "react";
 
 type AppState = "idle"|"analyzing"|"confirm"|"details"|"waiting"|"planning"|"composing"|"result"|"order"|"error";
@@ -10,7 +10,7 @@ interface Analysis {
   floor_color?: string; wall_color?: string; railing_color?: string;
 }
 interface UserData {
-  width_m: number; depth_m: number; direction: string; sun_pct: number;
+  width_m: number; depth_m: number; wall_height_m: number; direction: string; sun_pct: number;
   has_drain: boolean|null; has_power: boolean|null; garden_style: string;
 }
 interface ProductItem { name: string; qty: number; unitPrice: number; total: number; }
@@ -222,6 +222,7 @@ function ConfirmScreen({ photoDataUrl, analysis, userData, setUserData, onNext }
           <SectionTitle>מידות המרפסת - תקן אם צריך</SectionTitle>
           <Slider label="רוחב" value={userData.width_m} min={1} max={12} step={0.5} unit="מ׳" onChange={v=>setUserData({...userData,width_m:v})} />
           <Slider label="עומק" value={userData.depth_m} min={0.5} max={6} step={0.5} unit="מ׳" onChange={v=>setUserData({...userData,depth_m:v})} />
+          <Slider label="גובה קיר אחורי" value={userData.wall_height_m} min={2} max={4} step={0.1} unit="מ׳" onChange={v=>setUserData({...userData,wall_height_m:v})} />
           <div style={{ background:"#F5F0E8", borderRadius:"10px", padding:"10px 14px", fontSize:"12px", color:"#8B7D6B", textAlign:"center" }}>
             שטח משוער: <strong style={{ color:"#1A1714" }}>{(userData.width_m*userData.depth_m).toFixed(1)} מ״ר</strong>
           </div>
@@ -427,7 +428,7 @@ export default function Home() {
   const [photoDataUrl,  setPhotoDataUrl]  = useState<string|null>(null);
   const [appError,      setAppError]      = useState<AppError|null>(null);
   const [errorMsg,      setErrorMsg]      = useState("");
-  const [userData,      setUserData]      = useState<UserData>({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
+  const [userData,      setUserData]      = useState<UserData>({ width_m:4, depth_m:2.5, wall_height_m:2.6, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
   const [blueprintUrl,  setBlueprintUrl]  = useState<string|null>(null);
   const [composedUrl,   setComposedUrl]   = useState<string|null>(null);
   const [products,      setProducts]      = useState<Products|null>(null);
@@ -484,14 +485,14 @@ export default function Home() {
             if (ev.analysis) {
               const a = ev.analysis as Analysis;
               setAnalysis(a);
-              setUserData(prev=>({ ...prev, width_m:a.width_m??prev.width_m, depth_m:a.depth_m??prev.depth_m }));
+              setUserData(prev=>({ ...prev, width_m:a.width_m??prev.width_m, depth_m:a.depth_m??prev.depth_m, wall_height_m:a.wall_height_m??prev.wall_height_m }));
             }
           } else if (ev.type==="done") {
             const analyzeMs = Date.now() - analyzeStartRef.current;
             setTimings(prev => prev ? { ...prev, analyzeMs } : { analyzeMs, blueprintMs:0, planMs:0, composeMs:0 });
             const a = (ev.analysis as Analysis)||null;
             setAnalysis(a);
-            if (a?.width_m) setUserData(prev=>({ ...prev, width_m:a.width_m!, depth_m:a.depth_m??prev.depth_m }));
+            if (a?.width_m) setUserData(prev=>({ ...prev, width_m:a.width_m!, depth_m:a.depth_m??prev.depth_m, wall_height_m:a.wall_height_m??prev.wall_height_m }));
             setState("confirm");
           } else if (ev.type==="error") {
             throw new Error(ev.message as string);
@@ -526,7 +527,7 @@ export default function Home() {
       const planStart = Date.now();
       const res = await fetch("/api/plan", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ blueprintUrl:url, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"gray", wall_color:analysis?.wall_color??"white", railing_color:analysis?.railing_color??"gray", wall_height_m:analysis?.wall_height_m??2.6 }),
+        body: JSON.stringify({ blueprintUrl:url, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"gray", wall_color:analysis?.wall_color??"white", railing_color:analysis?.railing_color??"gray", wall_height_m:userData.wall_height_m }),
       });
       let data: Record<string,unknown> = {};
       try { data = await res.json(); } catch { setAppError({ message:"plan: invalid JSON (status "+res.status+")", route:"/api/plan", step:"parse" }); setState("error"); return; }
@@ -605,7 +606,7 @@ export default function Home() {
     setBlueprintUrl(null); setComposedUrl(null); setProducts(null);
     setWaitingFacts([]); setPlanningFacts([]); setTimings(null);
     setAppError(null); blueprintPromiseRef.current = null;
-    setUserData({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
+    setUserData({ width_m:4, depth_m:2.5, wall_height_m:2.6, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
     if (fileRef.current) fileRef.current.value = "";
   };
 
