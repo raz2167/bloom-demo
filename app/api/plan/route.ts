@@ -9,8 +9,8 @@ const PLANTER_VOLUME_L = 43.2;
 
 interface PlantChoice { nameHe: string; nameEn: string; totalCount: number; size: string; visualDesc: string; }
 
-function buildDallePrompt(planterCount: number, planterColorEn: string, plants: PlantChoice[]): string {
-  const plantDesc = plants.map(p => p.visualDesc + " (" + p.nameEn + ")").join(", ");
+function buildDallePrompt(planterCount: number, planterColorEn: string, plants: PlantChoice[], arrangement: string): string {
+  const plantList = plants.map(p => p.visualDesc + " (" + p.nameEn + ")").join(", ");
   return (
     "This is a black and white architectural line drawing of a balcony. " +
     "Preserve this line drawing exactly as the background. " +
@@ -21,8 +21,10 @@ function buildDallePrompt(planterCount: number, planterColorEn: string, plants: 
     "They are NOT sticking out into the balcony. " +
     "Evenly spaced across the full width of the back wall. " +
     "The railing is visible above and behind them. " +
-    "Each planter overflows with lush established plants (2-3 seasons old, full and dense): " + plantDesc + ". " +
-    "Plants spill naturally over the planter edges. Rich green foliage with vibrant flowers where applicable."
+    "Plant species available: " + plantList + ". " +
+    "Visual arrangement across the planters: " + arrangement + " " +
+    "Each planter overflows with lush established plants (2-3 seasons old, full and dense). " +
+    "Plants spill naturally over the planter edges. Create clear visual variety and rhythm between planters."
   );
 }
 
@@ -50,9 +52,10 @@ PLANTERS: ${planterCount} rectangular 60x30x30cm planters
 
 CHOOSE:
 1. planterColorHe (Hebrew color name) and planterColorEn (English) - match balcony colors, pick from: anthracite gray, light gray, terracotta, sand beige
-2. plants - 2 to 4 species total across ALL planters combined. Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia. Mediterranean: lavender/rosemary/thyme. Modern: ornamental grasses/succulents. Jungle: coleus/caladium/ferns.
-3. soilPct, perlitePct, tuffPct - one mix for all planters. Total must equal 100.
-4. waitingFacts - 3 facts in Hebrew about the chosen plants, plain text, no special characters
+2. plants - 3 to 5 species total. Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia. Mediterranean: lavender/rosemary/thyme. Modern: ornamental grasses/succulents. Jungle: coleus/caladium/ferns. Mix tall, medium and trailing/cascading species for visual interest.
+3. arrangement - one sentence describing the visual rhythm across the planters. Specify which plants go where, alternating patterns, height variation, color contrast. Example: "Alternate tall lavender centerpieces with low cascading rosemary, place red coleus as accent every third planter, trailing thyme spills over front edges."
+4. soilPct, perlitePct, tuffPct - one mix for all planters. Total must equal 100.
+5. waitingFacts - 3 facts in Hebrew about the chosen plants, plain text, no special characters
 
 Return ONLY this JSON, nothing else:
 {
@@ -61,6 +64,7 @@ Return ONLY this JSON, nothing else:
   "plants": [
     {"nameHe": "...", "nameEn": "...", "totalCount": 4, "size": "medium", "visualDesc": "purple flowering lavender 30cm tall dense foliage"}
   ],
+  "arrangement": "Alternate tall lavender with cascading rosemary, red coleus accent every other planter, trailing thyme over front edges.",
   "soilPct": 60, "perlitePct": 20, "tuffPct": 20,
   "waitingFacts": ["fact1", "fact2", "fact3"]
 }`;
@@ -68,7 +72,7 @@ Return ONLY this JSON, nothing else:
     L("[2] calling Claude Haiku (minimal output)");
     const response = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 800,
+      max_tokens: 1000,
       system: "You are a professional garden designer. Respond ONLY with valid JSON, no markdown, no text outside JSON.",
       messages: [{ role: "user", content: userPrompt }],
     });
@@ -77,9 +81,10 @@ Return ONLY this JSON, nothing else:
     L("[2] response length: " + raw.length);
 
     L("[3] parsing JSON");
-    let plan: { planterColorHe: string; planterColorEn: string; plants: PlantChoice[]; soilPct: number; perlitePct: number; tuffPct: number; waitingFacts: string[] } = {
+    let plan: { planterColorHe: string; planterColorEn: string; plants: PlantChoice[]; arrangement: string; soilPct: number; perlitePct: number; tuffPct: number; waitingFacts: string[] } = {
       planterColorHe: "אפור אנתרציט", planterColorEn: "anthracite gray",
       plants: [{ nameHe: "לבנדר", nameEn: "lavender", totalCount: planterCount * 2, size: "medium", visualDesc: "purple flowering lavender 30cm tall" }],
+      arrangement: "Alternate tall lavender with low cascading rosemary across planters, varying heights for visual rhythm.",
       soilPct: 60, perlitePct: 20, tuffPct: 20,
       waitingFacts: [],
     };
@@ -96,7 +101,7 @@ Return ONLY this JSON, nothing else:
     L("[3] plan: " + plan.planterColorEn + ", " + plan.plants.length + " species");
 
     L("[4] building dallePrompt server-side");
-    const dallePrompt = buildDallePrompt(planterCount, plan.planterColorEn, plan.plants);
+    const dallePrompt = buildDallePrompt(planterCount, plan.planterColorEn, plan.plants, plan.arrangement);
     L("[4] prompt length: " + dallePrompt.length);
 
     L("[5] calculating products");
