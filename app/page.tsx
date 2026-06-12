@@ -16,6 +16,7 @@ interface UserData {
 interface ProductItem { name: string; qty: number; unitPrice: number; total: number; }
 interface Products { items: ProductItem[]; grandTotal: number; }
 interface AppError { message: string; step?: string; route?: string; log?: string[]; }
+interface Timings { analyzeMs: number; blueprintMs: number; planMs: number; composeMs: number; }
 
 const NURSERY_FACTS = [
   "משתלת רז בהרצליה פעילה כבר מעל 20 שנה ומתמחה בצמחי מרפסת ים-תיכוניים",
@@ -372,13 +373,35 @@ function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void 
   );
 }
 
-function OrderScreen() {
+function OrderScreen({ timings }: { timings: Timings | null }) {
+  const fmt = (ms: number) => (ms / 1000).toFixed(1) + "s";
+  const totalWait = timings ? timings.analyzeMs + timings.planMs + timings.composeMs : 0;
   return (
     <div dir="rtl" style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#FAF7F2", padding:"40px 24px", fontFamily:"sans-serif", textAlign:"center" }}>
       <div style={{ fontSize:"64px", marginBottom:"24px" }}>🌿</div>
       <h1 style={{ fontSize:"28px", fontWeight:"200", color:"#1A1714", marginBottom:"12px" }}>הזמנתך התקבלה!</h1>
       <p style={{ fontSize:"15px", color:"#8B7D6B", lineHeight:"1.7", maxWidth:"280px" }}>הגינה שלך בדרך אליך.</p>
-      <p style={{ fontSize:"11px", color:"#C4B8A8", marginTop:"32px", letterSpacing:"2px" }}>HIBLOOM · BALCONY DESIGN</p>
+      {timings && (
+        <div style={{ marginTop:"32px", width:"100%", maxWidth:"320px", background:"#1A1714", borderRadius:"14px", padding:"16px", textAlign:"right" }}>
+          <div style={{ fontSize:"10px", color:"rgba(250,247,242,0.4)", letterSpacing:"2px", marginBottom:"12px", textAlign:"center" }}>DEBUG TIMINGS</div>
+          {[
+            { label:"Claude Vision (ניתוח)", ms:timings.analyzeMs },
+            { label:"DALL-E Blueprint (מקביל)", ms:timings.blueprintMs },
+            { label:"Claude Haiku (תכנון)", ms:timings.planMs },
+            { label:"DALL-E Compose (עיצוב)", ms:timings.composeMs },
+          ].map(({ label, ms }) => (
+            <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
+              <span style={{ fontSize:"12px", color:"rgba(250,247,242,0.5)" }}>{label}</span>
+              <span style={{ fontSize:"12px", color:"#7AA870", fontFamily:"monospace", fontWeight:"600" }}>{fmt(ms)}</span>
+            </div>
+          ))}
+          <div style={{ display:"flex", justifyContent:"space-between", paddingTop:"10px", marginTop:"4px" }}>
+            <span style={{ fontSize:"12px", color:"rgba(250,247,242,0.7)", fontWeight:"600" }}>סה"כ המתנה נראית</span>
+            <span style={{ fontSize:"13px", color:"#FAF7F2", fontFamily:"monospace", fontWeight:"700" }}>{fmt(totalWait)}</span>
+          </div>
+        </div>
+      )}
+      <p style={{ fontSize:"11px", color:"#C4B8A8", marginTop:"24px", letterSpacing:"2px" }}>HIBLOOM · BALCONY DESIGN</p>
     </div>
   );
 }
@@ -396,24 +419,37 @@ export default function Home() {
   const [products,      setProducts]      = useState<Products|null>(null);
   const [waitingFacts,  setWaitingFacts]  = useState<string[]>([]);
   const [planningFacts, setPlanningFacts] = useState<string[]>([]);
+  const [timings,       setTimings]       = useState<Timings|null>(null);
 
   const blueprintPromiseRef = useRef<Promise<string|null>|null>(null);
+  const blueprintStartRef   = useRef<number>(0);
+  const analyzeStartRef     = useRef<number>(0);
   const fileRef = useRef<HTMLInputElement>(null!);
 
   useEffect(()=>{ window.scrollTo(0,0); }, [state]);
 
   const handleFile = async (file: File) => {
     setState("analyzing"); setStep(0); setErrorMsg("");
-    setComposedUrl(null); setProducts(null); setWaitingFacts([]); setPlanningFacts([]);
+    setComposedUrl(null); setProducts(null); setWaitingFacts([]); setPlanningFacts([]); setTimings(null);
     try {
       const dataUrl = await compressImage(file);
       setPhotoDataUrl(dataUrl);
       const base64 = dataUrl.split(",")[1];
       const mime   = file.type||"image/jpeg";
+
+      // Start blueprint timer and wrap promise to record duration
+      blueprintStartRef.current = Date.now();
       blueprintPromiseRef.current = fetch("/api/blueprint", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ imageBase64:base64, mimeType:mime }),
-      }).then(r=>r.json()).then(d=>(d.blueprintUrl as string)||null).catch(()=>null);
+      }).then(r=>r.json()).then(d=>{
+        const bpMs = Date.now() - blueprintStartRef.current;
+        setTimings(prev => prev ? { ...prev, blueprintMs:bpMs } : { analyzeMs:0, blueprintMs:bpMs, planMs:0, composeMs:0 });
+        return (d.blueprintUrl as string)||null;
+      }).catch(()=>null);
+
+      // Start analyze timer
+      analyzeStartRef.current = Date.now();
       const res = await fetch("/api/analyze", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ imageBase64:base64, mimeType:mime }),
@@ -439,6 +475,8 @@ export default function Home() {
               setUserData(prev=>({ ...prev, width_m:a.width_m??prev.width_m, depth_m:a.depth_m??prev.depth_m }));
             }
           } else if (ev.type==="done") {
+            const analyzeMs = Date.now() - analyzeStartRef.current;
+            setTimings(prev => prev ? { ...prev, analyzeMs } : { analyzeMs, blueprintMs:0, planMs:0, composeMs:0 });
             const a = (ev.analysis as Analysis)||null;
             setAnalysis(a);
             if (a?.width_m) setUserData(prev=>({ ...prev, width_m:a.width_m!, depth_m:a.depth_m??prev.depth_m }));
@@ -473,6 +511,7 @@ export default function Home() {
 
     let dallePrompt = "";
     try {
+      const planStart = Date.now();
       const res = await fetch("/api/plan", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ blueprintUrl:url, width_m:userData.width_m, depth_m:userData.depth_m, direction:userData.direction, sun_pct:userData.sun_pct, garden_style:userData.garden_style, floor_color:analysis?.floor_color??"gray", wall_color:analysis?.wall_color??"white", railing_color:analysis?.railing_color??"gray" }),
@@ -480,6 +519,8 @@ export default function Home() {
       let data: Record<string,unknown> = {};
       try { data = await res.json(); } catch { setAppError({ message:"plan: invalid JSON (status "+res.status+")", route:"/api/plan", step:"parse" }); setState("error"); return; }
       if (!data.dallePrompt) { setAppError({ message:String(data.error||"no dallePrompt"), route:"/api/plan", step:String(data.step||"unknown"), log:getDebugLog(data) }); setState("error"); return; }
+      const planMs = Date.now() - planStart;
+      setTimings(prev => prev ? { ...prev, planMs } : { analyzeMs:0, blueprintMs:0, planMs, composeMs:0 });
       dallePrompt = data.dallePrompt as string;
       setWaitingFacts((data.waitingFacts as string[])||[]);
       setProducts(data.products as Products);
@@ -490,6 +531,7 @@ export default function Home() {
 
     setState("composing");
     try {
+      const composeStart = Date.now();
       const res = await fetch("/api/compose", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ blueprintUrl:url, dallePrompt }),
@@ -502,7 +544,11 @@ export default function Home() {
       }
       let data: Record<string,unknown> = {};
       try { data = await res.json(); } catch { setAppError({ message:"compose: invalid JSON", route:"/api/compose", step:"parse" }); setState("error"); return; }
-      if (data.imageUrl) { setComposedUrl(data.imageUrl as string); setState("result"); }
+      if (data.imageUrl) {
+        const composeMs = Date.now() - composeStart;
+        setTimings(prev => prev ? { ...prev, composeMs } : { analyzeMs:0, blueprintMs:0, planMs:0, composeMs });
+        setComposedUrl(data.imageUrl as string); setState("result");
+      }
       else { setAppError({ message:String(data.error||"no imageUrl"), route:"/api/compose", step:String(data.step||"unknown"), log:getDebugLog(data) }); setState("error"); }
     } catch (err: unknown) {
       setAppError({ message:err instanceof Error?err.message:"network error", route:"/api/compose", step:"fetch" });
@@ -525,7 +571,7 @@ export default function Home() {
   const handleReset = () => {
     setState("idle"); setAnalysis(null); setPhotoDataUrl(null); setErrorMsg("");
     setBlueprintUrl(null); setComposedUrl(null); setProducts(null);
-    setWaitingFacts([]); setPlanningFacts([]);
+    setWaitingFacts([]); setPlanningFacts([]); setTimings(null);
     setAppError(null); blueprintPromiseRef.current = null;
     setUserData({ width_m:4, depth_m:2.5, direction:"", sun_pct:50, has_drain:null, has_power:null, garden_style:"" });
     if (fileRef.current) fileRef.current.value = "";
@@ -535,7 +581,7 @@ export default function Home() {
   if (state==="waiting")   return <TipsScreen title="מכין את השרטוט" subtitle="עוד רגע ומתחילים לתכנן" facts={NURSERY_FACTS} />;
   if (state==="planning")  return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={planningFacts.length ? planningFacts : NURSERY_FACTS} />;
   if (state==="composing") return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts.length ? waitingFacts : NURSERY_FACTS} />;
-  if (state==="order")     return <OrderScreen />;
+  if (state==="order")     return <OrderScreen timings={timings} />;
   if (state==="error")     return <ErrorScreen error={appError??{ message:errorMsg||"unknown error" }} onReset={handleReset} />;
   if (state==="result"&&composedUrl&&products) return <ResultScreen composedUrl={composedUrl} products={products} onOrder={()=>setState("order")} onReset={handleReset} />;
   if (state==="confirm"&&analysis&&photoDataUrl) return <ConfirmScreen photoDataUrl={photoDataUrl} analysis={analysis} userData={userData} setUserData={setUserData} onNext={()=>setState("details")} />;
