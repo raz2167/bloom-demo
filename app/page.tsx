@@ -122,7 +122,7 @@ function NurseryFactsTicker() {
   );
 }
 
-function TipsScreen({ title, subtitle, facts }: { title:string; subtitle:string; facts:string[] }) {
+function TipsScreen({ title, subtitle, facts, imageUrl }: { title:string; subtitle:string; facts:string[]; imageUrl?:string }) {
   const [idx, setIdx] = useState(0);
   const [vis, setVis] = useState(true);
   useEffect(()=>{
@@ -134,20 +134,28 @@ function TipsScreen({ title, subtitle, facts }: { title:string; subtitle:string;
     return ()=>clearInterval(t);
   }, [facts]);
   return (
-    <div dir="rtl" style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"radial-gradient(ellipse at 50% 40%,#2A3828 0%,#111 70%)", padding:"40px 24px", fontFamily:"sans-serif" }}>
-      <Spinner emoji="✦" />
-      <h2 style={{ color:"#FAF8F5", fontSize:"18px", marginBottom:"4px", fontWeight:"200", textAlign:"center" }}>{title}</h2>
-      <p style={{ color:"rgba(250,248,245,0.3)", fontSize:"12px", marginBottom:"32px", textAlign:"center" }}>{subtitle}</p>
-      {facts.length > 0 && (
-        <div style={{ width:"100%", maxWidth:"320px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(122,168,112,0.2)", borderRadius:"16px", padding:"20px", opacity:vis?1:0, transition:"opacity 0.3s", minHeight:"100px" }}>
-          <div style={{ fontSize:"28px", marginBottom:"10px", textAlign:"center" }}>🌿</div>
-          <p style={{ margin:0, color:"rgba(250,248,245,0.8)", fontSize:"14px", lineHeight:"1.7", textAlign:"center", fontWeight:"300" }}>{facts[idx]}</p>
+    <div dir="rtl" style={{ display:"flex", flexDirection:"column", alignItems:"center", minHeight:"100vh", background:"radial-gradient(ellipse at 50% 40%,#2A3828 0%,#111 70%)", fontFamily:"sans-serif" }}>
+      {imageUrl && (
+        <div style={{ width:"100%", maxHeight:"240px", overflow:"hidden", position:"relative" }}>
+          <img src={imageUrl} alt="" style={{ width:"100%", objectFit:"cover", maxHeight:"240px", opacity:0.85, display:"block" }} />
+          <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"60px", background:"linear-gradient(to bottom, transparent, #111)" }} />
         </div>
       )}
-      <div style={{ display:"flex", gap:"5px", marginTop:"20px", flexWrap:"wrap", justifyContent:"center" }}>
-        {facts.map((_,i)=>(
-          <div key={i} style={{ width:i===idx?"14px":"5px", height:"5px", borderRadius:"3px", transition:"all 0.3s", background:i===idx?"#7AA870":"rgba(122,168,112,0.25)" }} />
-        ))}
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flex:1, padding:"32px 24px 40px" }}>
+        <Spinner emoji="✦" />
+        <h2 style={{ color:"#FAF8F5", fontSize:"18px", marginBottom:"4px", fontWeight:"200", textAlign:"center" }}>{title}</h2>
+        <p style={{ color:"rgba(250,248,245,0.3)", fontSize:"12px", marginBottom:"32px", textAlign:"center" }}>{subtitle}</p>
+        {facts.length > 0 && (
+          <div style={{ width:"100%", maxWidth:"320px", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(122,168,112,0.2)", borderRadius:"16px", padding:"20px", opacity:vis?1:0, transition:"opacity 0.3s", minHeight:"100px" }}>
+            <div style={{ fontSize:"28px", marginBottom:"10px", textAlign:"center" }}>🌿</div>
+            <p style={{ margin:0, color:"rgba(250,248,245,0.8)", fontSize:"14px", lineHeight:"1.7", textAlign:"center", fontWeight:"300" }}>{facts[idx]}</p>
+          </div>
+        )}
+        <div style={{ display:"flex", gap:"5px", marginTop:"20px", flexWrap:"wrap", justifyContent:"center" }}>
+          {facts.map((_,i)=>(
+            <div key={i} style={{ width:i===idx?"14px":"5px", height:"5px", borderRadius:"3px", transition:"all 0.3s", background:i===idx?"#7AA870":"rgba(122,168,112,0.25)" }} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -578,9 +586,9 @@ export default function Home() {
   };
 
   if (state==="analyzing") return <LoadingScreen step={step} />;
-  if (state==="waiting")   return <TipsScreen title="מכין את השרטוט" subtitle="עוד רגע ומתחילים לתכנן" facts={NURSERY_FACTS} />;
-  if (state==="planning")  return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={planningFacts.length ? planningFacts : NURSERY_FACTS} />;
-  if (state==="composing") return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts.length ? waitingFacts : NURSERY_FACTS} />;
+  if (state==="waiting")   return <TipsScreen title="מכין את השרטוט" subtitle="עוד רגע ומתחילים לתכנן" facts={NURSERY_FACTS} imageUrl={photoDataUrl??undefined} />;
+  if (state==="planning")  return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={planningFacts.length ? planningFacts : NURSERY_FACTS} imageUrl={photoDataUrl??undefined} />;
+  if (state==="composing") return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts.length ? waitingFacts : NURSERY_FACTS} imageUrl={blueprintUrl??undefined} />;
   if (state==="order")     return <OrderScreen timings={timings} />;
   if (state==="error")     return <ErrorScreen error={appError??{ message:errorMsg||"unknown error" }} onReset={handleReset} />;
   if (state==="result"&&composedUrl&&products) return <ResultScreen composedUrl={composedUrl} products={products} onOrder={()=>setState("order")} onReset={handleReset} />;
