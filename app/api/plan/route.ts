@@ -7,18 +7,23 @@ export const maxDuration = 60;
 const PRICES = { adanit_unit:189, plant_small:35, plant_medium:55, plant_large:85, soil_liter:1.2, perlite_liter:2.5, tuff_liter:1.8 };
 const PLANTER_VOLUME_L = 43.2;
 
-interface PlantItem { nameHe: string; count: number; size: string; }
-interface PlanterItem { fillMix: { soilPct: number; perlitePct: number; tuffPct: number }; plants: PlantItem[]; }
+interface PlantChoice { nameHe: string; nameEn: string; totalCount: number; size: string; visualDesc: string; }
 
-async function getBlueprintBase64(blueprintUrl: string): Promise<string> {
-  if (blueprintUrl.startsWith("data:")) {
-    const comma = blueprintUrl.indexOf(",");
-    if (comma === -1) throw new Error("invalid data URL");
-    return blueprintUrl.slice(comma + 1);
-  }
-  const r = await fetch(blueprintUrl);
-  if (!r.ok) throw new Error("blueprint download failed: " + r.status);
-  return Buffer.from(await r.arrayBuffer()).toString("base64");
+function buildDallePrompt(planterCount: number, planterColorEn: string, plants: PlantChoice[]): string {
+  const plantDesc = plants.map(p => p.visualDesc + " (" + p.nameEn + ")").join(", ");
+  return (
+    "This is a black and white architectural line drawing of a balcony. " +
+    "Preserve this line drawing exactly as the background. " +
+    "Do not replace or redraw the floor, walls or railing. " +
+    "Only add the following colored elements on top of the existing line drawing: " +
+    "Place exactly " + planterCount + " rectangular planters (60x30x30cm) in " + planterColorEn + ", " +
+    "flush against the back wall, touching it, their long 60cm side running parallel to the wall like window boxes. " +
+    "They are NOT sticking out into the balcony. " +
+    "Evenly spaced across the full width of the back wall. " +
+    "The railing is visible above and behind them. " +
+    "Each planter overflows with lush established plants (2-3 seasons old, full and dense): " + plantDesc + ". " +
+    "Plants spill naturally over the planter edges. Rich green foliage with vibrant flowers where applicable."
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -32,121 +37,80 @@ export async function POST(req: NextRequest) {
     if (!blueprintUrl)                  return NextResponse.json({ error: "missing blueprintUrl",  step: "validate", debug: { log } }, { status: 400 });
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "missing Anthropic key", step: "validate", debug: { log } }, { status: 500 });
 
-    // Calculate planter count from balcony width: one planter per 90cm (60cm planter + 30cm gap)
     const planterCount = Math.min(8, Math.max(2, Math.floor(width_m / 0.9)));
-    L("[1] calculated planterCount: " + planterCount + " for width " + width_m + "m");
-
-    L("[2] extracting blueprint base64");
-    const blueprintBase64 = await getBlueprintBase64(blueprintUrl);
-    L("[2] base64 length: " + blueprintBase64.length);
+    L("[1] planterCount: " + planterCount + " for width " + width_m + "m");
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const userPrompt = `Analyze this balcony blueprint and create a garden design plan.
+    const userPrompt = `Garden design for a balcony. Return minimal JSON only.
 
 BALCONY: ${width_m}m x ${depth_m}m, faces ${direction}, ${sun_pct}% sun, style=${garden_style}
 COLORS: floor=${floor_color}, walls=${wall_color}, railing=${railing_color}
-PLANTER: rectangular 60x30x30cm, 43.2L usable
-PLANTER COUNT: exactly ${planterCount} planters (pre-calculated, do not change this number)
+PLANTERS: ${planterCount} rectangular 60x30x30cm planters
 
-RULES:
-- Use exactly ${planterCount} planters, evenly spaced along the back wall
-- Plants must look established (2-3 seasons old, full and lush)
-- Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia
-- Mediterranean: lavender/rosemary/thyme. Modern: grasses/succulents. Jungle: coleus/caladium/ferns
-- Fill: drought=60%soil+20%perlite+20%tuff, flowering=70%+20%+10%, succulents=40%+40%+20%, shade=80%+10%+10%
-- Planter color from: anthracite, light gray, terracotta, sand/beige (match balcony colors)
-- waitingFacts in Hebrew only, plain text, no special characters
+CHOOSE:
+1. planterColorHe (Hebrew color name) and planterColorEn (English) - match balcony colors, pick from: anthracite gray, light gray, terracotta, sand beige
+2. plants - 2 to 4 species total across ALL planters combined. Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia. Mediterranean: lavender/rosemary/thyme. Modern: ornamental grasses/succulents. Jungle: coleus/caladium/ferns.
+3. soilPct, perlitePct, tuffPct - one mix for all planters. Total must equal 100.
+4. waitingFacts - 3 facts in Hebrew about the chosen plants, plain text, no special characters
 
-CRITICAL - FLOOR PLACEMENT AND ORIENTATION:
-All planters stand ON THE FLOOR. They do NOT sit on top of the railing or wall.
-The correct visual: planters are flush against the back wall, touching it, with the railing visible BEHIND and ABOVE them.
-In the blueprint image the railing appears as horizontal lines near the TOP of the image. Planters must appear in the LOWER HALF of the image.
-
-ORIENTATION: Each planter must be placed with its LONG SIDE (60cm) running PARALLEL to the back wall.
-This means the planter runs left-to-right along the wall, NOT front-to-back (sticking out into the balcony).
-The 30cm depth faces toward the viewer. Think of a window box mounted along a wall.
-
-POSITION: Every planter must be FLUSH against the back wall - touching it, no gap.
-They should not float in the middle of the balcony floor.
-
-CRITICAL - dallePrompt construction:
-The image DALL-E receives is a BLACK AND WHITE ARCHITECTURAL LINE DRAWING.
-Your dallePrompt MUST:
-1. Start with: "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing:"
-2. Explicitly state: planters are FLUSH AGAINST THE BACK WALL, touching it, their long 60cm side running parallel to the wall (like window boxes along a wall).
-3. Explicitly state: planters are NOT sticking out into the balcony, NOT floating in the middle of the floor.
-4. Explicitly state: planters appear in the UPPER-LOWER portion of the image, just in front of where the wall meets the floor.
-5. Describe: exactly ${planterCount} planters evenly spaced along the full width, their color, and the lush plants inside each one.
-Do NOT describe a photorealistic scene. The background stays as the line drawing.
-
-Return ONLY valid JSON, no markdown:
+Return ONLY this JSON, nothing else:
 {
-  "planterCount": ${planterCount},
-  "layout": "line",
-  "planterColor": "anthracite gray",
-  "planterColorHe": "אפור אנתרציט",
-  "perspective": { "vanishingPointDescription": "...", "floorAngle": "...", "railingPosition": "top portion of image", "depthCue": "..." },
-  "planters": [{ "id": 1, "position": "evenly spaced along back wall", "rotation": "parallel to railing", "plants": [{ "nameHe": "לבנדר", "nameEn": "lavender", "count": 2, "size": "medium", "description": "purple flowering lavender 30cm tall" }], "fillMix": { "soilPct": 60, "perlitePct": 20, "tuffPct": 20 } }],
-  "dallePrompt": "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace, repaint or add texture to the floor, walls or railing. Only add the following colored elements on top of the existing line drawing: Place exactly ${planterCount} rectangular planters (60x30x30cm) flush against the back wall, touching it, their long 60cm side running parallel to the wall like window boxes. They are NOT sticking out into the balcony. Evenly spaced across the full width of the balcony. The railing is visible above and behind them. [CONTINUE WITH COLOR AND PLANT DETAILS]",
-  "waitingFacts": ["fact1", "fact2", "fact3", "fact4", "fact5"]
+  "planterColorHe": "...",
+  "planterColorEn": "...",
+  "plants": [
+    {"nameHe": "...", "nameEn": "...", "totalCount": 4, "size": "medium", "visualDesc": "purple flowering lavender 30cm tall dense foliage"}
+  ],
+  "soilPct": 60, "perlitePct": 20, "tuffPct": 20,
+  "waitingFacts": ["fact1", "fact2", "fact3"]
 }`;
 
-    L("[3] calling Claude Vision");
+    L("[2] calling Claude Haiku (minimal output)");
     const response = await client.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      model: "claude-haiku-4-5",
+      max_tokens: 800,
       system: "You are a professional garden designer. Respond ONLY with valid JSON, no markdown, no text outside JSON.",
-      messages: [{ role: "user", content: [
-        { type: "image", source: { type: "base64", media_type: "image/png", data: blueprintBase64 } },
-        { type: "text", text: userPrompt },
-      ]}],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const raw = response.content.filter(b => b.type === "text").map(b => (b as {type:"text";text:string}).text).join("");
-    L("[3] response length: " + raw.length);
+    L("[2] response length: " + raw.length);
 
-    L("[4] parsing JSON");
-    let plan: Record<string, unknown> = {};
+    L("[3] parsing JSON");
+    let plan: { planterColorHe: string; planterColorEn: string; plants: PlantChoice[]; soilPct: number; perlitePct: number; tuffPct: number; waitingFacts: string[] } = {
+      planterColorHe: "אפור אנתרציט", planterColorEn: "anthracite gray",
+      plants: [{ nameHe: "לבנדר", nameEn: "lavender", totalCount: planterCount * 2, size: "medium", visualDesc: "purple flowering lavender 30cm tall" }],
+      soilPct: 60, perlitePct: 20, tuffPct: 20,
+      waitingFacts: [],
+    };
     try {
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const start = cleaned.indexOf("{");
       const end   = cleaned.lastIndexOf("}");
       if (start === -1 || end === -1) throw new Error("no JSON found");
-      plan = JSON.parse(cleaned.slice(start, end + 1));
+      const parsed = JSON.parse(cleaned.slice(start, end + 1));
+      plan = { ...plan, ...parsed };
     } catch (parseErr) {
-      L("[4] parse error: " + parseErr);
-      return NextResponse.json({ error: "invalid JSON from Claude", step: "json_parse", debug: { log } }, { status: 500 });
+      L("[3] parse error: " + parseErr + " — using defaults");
     }
+    L("[3] plan: " + plan.planterColorEn + ", " + plan.plants.length + " species");
 
-    // Enforce calculated planterCount regardless of what Claude returned
-    plan.planterCount = planterCount;
-    L("[4] plan: " + planterCount + " planters (enforced)");
+    L("[4] building dallePrompt server-side");
+    const dallePrompt = buildDallePrompt(planterCount, plan.planterColorEn, plan.plants);
+    L("[4] prompt length: " + dallePrompt.length);
 
     L("[5] calculating products");
     const items: { name: string; qty: number; unitPrice: number; total: number }[] = [];
-
     items.push({ name: "אדנית מלבנית 60x30x30 סמ (" + plan.planterColorHe + ")", qty: planterCount, unitPrice: PRICES.adanit_unit, total: planterCount * PRICES.adanit_unit });
 
-    const allPlants: PlantItem[] = [];
-    (plan.planters as PlanterItem[]).forEach(p => p.plants.forEach(pl => allPlants.push(pl)));
-
-    const plantMap: Record<string, { count: number; size: string }> = {};
-    allPlants.forEach(pl => {
-      if (!plantMap[pl.nameHe]) plantMap[pl.nameHe] = { count: 0, size: pl.size };
-      plantMap[pl.nameHe].count += pl.count;
-    });
-    Object.entries(plantMap).forEach(([name, { count, size }]) => {
-      const unitPrice = size === "small" ? PRICES.plant_small : size === "large" ? PRICES.plant_large : PRICES.plant_medium;
-      items.push({ name: name + " שתיל", qty: count, unitPrice, total: count * unitPrice });
+    plan.plants.forEach(pl => {
+      const unitPrice = pl.size === "small" ? PRICES.plant_small : pl.size === "large" ? PRICES.plant_large : PRICES.plant_medium;
+      items.push({ name: pl.nameHe + " שתיל", qty: pl.totalCount, unitPrice, total: pl.totalCount * unitPrice });
     });
 
-    let totalSoilL = 0, totalPerliteL = 0, totalTuffL = 0;
-    (plan.planters as PlanterItem[]).forEach(p => {
-      totalSoilL    += PLANTER_VOLUME_L * p.fillMix.soilPct    / 100;
-      totalPerliteL += PLANTER_VOLUME_L * p.fillMix.perlitePct / 100;
-      totalTuffL    += PLANTER_VOLUME_L * p.fillMix.tuffPct    / 100;
-    });
+    const totalSoilL    = PLANTER_VOLUME_L * planterCount * plan.soilPct    / 100;
+    const totalPerliteL = PLANTER_VOLUME_L * planterCount * plan.perlitePct / 100;
+    const totalTuffL    = PLANTER_VOLUME_L * planterCount * plan.tuffPct    / 100;
 
     const soilBags    = Math.ceil(totalSoilL    / 20);
     const perliteBags = Math.ceil(totalPerliteL / 10);
@@ -159,7 +123,7 @@ Return ONLY valid JSON, no markdown:
     const grandTotal = items.reduce((s, i) => s + i.total, 0);
     L("[5] total: " + grandTotal + " ILS, " + items.length + " items");
 
-    return NextResponse.json({ dallePrompt: plan.dallePrompt, waitingFacts: plan.waitingFacts ?? [], products: { items, grandTotal }, debug: { log } });
+    return NextResponse.json({ dallePrompt, waitingFacts: plan.waitingFacts ?? [], products: { items, grandTotal }, debug: { log } });
 
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : String(err);
