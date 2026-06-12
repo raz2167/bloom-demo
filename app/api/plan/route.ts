@@ -10,6 +10,14 @@ const PLANTER_VOLUME_L = 43.2;
 interface PlantChoice { nameHe: string; nameEn: string; totalCount: number; size: string; visualDesc: string; }
 interface PlanterLayout { position: number; tall: string; mid: string; trail: string; }
 
+const BLUEPRINT_BASE = (
+  "This is a black and white architectural line drawing of a balcony. " +
+  "Preserve this exact line drawing as the background. " +
+  "Do not redraw the floor, walls, or railing. " +
+  "Add lush colored plants and planters on top of the line drawing only. " +
+  "PLACEMENT: all planters flush against the back wall, long 60cm side PARALLEL to wall like window boxes, NOT sticking into the balcony. Railing visible above and behind. "
+);
+
 export async function POST(req: NextRequest) {
   const log: string[] = [];
   const L = (m: string) => { console.log(m); log.push(m); };
@@ -27,48 +35,44 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const styleGuide = garden_style === "mediterranean"
-      ? "Mediterranean style: lavender, rosemary, thyme, sage, geranium, silver dusty miller. Warm purples, pinks, silvers."
+      ? "Mediterranean: lavender, rosemary, geranium, sage, dusty miller. Purples, pinks, silvers."
       : garden_style === "jungle"
-      ? "Tropical jungle style: coleus (vibrant colored leaves), caladium, asparagus fern, wandering jew, sweet potato vine. Bold colors, dramatic leaves."
-      : "Modern minimal style: ornamental grasses, succulents, echeveria, sedum, agave, white or pale flowers only. Clean, architectural.";
+      ? "Tropical jungle: coleus (bold colored leaves), caladium, asparagus fern, wandering jew, sweet potato vine. Bold colors, dramatic."
+      : "Modern minimal: ornamental grasses, succulents, echeveria, white flowers, sedum. Clean, architectural.";
 
-    const sunGuide = sun_pct > 70
-      ? "Full sun (>70%): drought-tolerant sun-lovers"
-      : sun_pct > 40
-      ? "Partial sun (40-70%): adaptable species"
-      : "Shade (<40%): shade-tolerant species only";
+    const sunGuide = sun_pct > 70 ? "Full sun: lavender, rosemary, geranium, sage, thyme, petunia"
+      : sun_pct > 40 ? "Partial sun: impatiens, begonia, coleus, browallia, fuchsia"
+      : "Shade: ferns, browallia, impatiens, caladium, ivy";
 
-    const userPrompt = `You are a world-class garden designer. Design a stunning balcony garden. Return JSON only.
+    const userPrompt = `You are a professional garden designer. Design a balcony garden. Return JSON only.
 
-BALCONY: ${width_m}m wide, ${depth_m}m deep, faces ${direction}, ${sun_pct}% sun
+BALCONY: ${width_m}m wide, ${depth_m}m deep, ${direction}, ${sun_pct}% sun
 COLORS: floor=${floor_color}, walls=${wall_color}, railing=${railing_color}
 STYLE: ${styleGuide}
 SUN: ${sunGuide}
-PLANTERS: exactly ${planterCount} rectangular planters, 60cm wide x 30cm deep x 30cm tall, flush to back wall
+PLANTERS: exactly ${planterCount} rectangular 60x30x30cm planters
 
-DESIGN RULES:
-- Each planter has a UNIQUE combination: 1 tall focal plant (back) + 1 mid flowering plant (center) + 1 trailing/cascading plant (front edge)
-- Vary colors dramatically between planters - no two adjacent planters the same
-- Create visual rhythm: alternate heights and colors across the row
-- Plants look lush and established (2-3 seasons old, full, overflowing)
+IMPORTANT - create a planterLayout with DIFFERENT plants in each planter:
+- Each planter: 1 tall focal (back, 35-50cm), 1 medium flowering (center, 20-30cm), 1 trailing/cascading (front edge, spills down)
+- Vary colors: alternate warm/cool, never same color in adjacent planters
+- Example rhythm for 4 planters: [purple+pink+blue] [orange+yellow+green] [purple+white+silver] [red+pink+violet]
 
-Choose a planter color that contrasts beautifully with: walls=${wall_color}, floor=${floor_color}
-
-Return ONLY this JSON (no markdown):
+Return ONLY this JSON:
 {
-  "planterColorHe": "Hebrew color name",
-  "planterColorEn": "English color name e.g. anthracite gray / terracotta / sand beige / slate blue",
+  "planterColorHe": "Hebrew color",
+  "planterColorEn": "anthracite gray OR terracotta OR sand beige OR slate blue",
   "plants": [
-    {"nameHe": "Hebrew name", "nameEn": "English name", "totalCount": 6, "size": "medium", "visualDesc": "specific visual: color, height, form e.g. deep purple spike 40cm upright"}
+    {"nameHe": "Hebrew", "nameEn": "English", "totalCount": 6, "size": "medium", "visualDesc": "specific: purple spike 40cm upright dense"}
   ],
   "planterLayout": [
-    {"position": 1, "tall": "plant name + visual", "mid": "plant name + visual", "trail": "plant name + visual"}
+    {"position": 1, "tall": "rosemary, silvery-green upright 40cm", "mid": "pink geranium, round clusters 25cm", "trail": "blue lobelia, cascading waterfall"},
+    {"position": 2, "tall": "lavender, purple spikes 35cm", "mid": "orange calibrachoa, tiny flowers", "trail": "silver dichondra, flowing silver curtain"}
   ],
   "soilPct": 60, "perlitePct": 20, "tuffPct": 20,
-  "designFacts": ["Hebrew fact max 12 words", "...10 total facts..."]
+  "designFacts": ["Hebrew fact max 12 words x10"]
 }
 
-planterLayout must have exactly ${planterCount} entries. Make each planter visually distinct.`;
+planterLayout MUST have exactly ${planterCount} entries with DIFFERENT plant combinations.`;
 
     L("[2] calling Claude Haiku");
     const response = await client.messages.create({
@@ -97,9 +101,9 @@ planterLayout must have exactly ${planterCount} entries. Make each planter visua
       plants: [{ nameHe: "לבנדר", nameEn: "lavender", totalCount: planterCount * 2, size: "medium", visualDesc: "purple flowering lavender 30cm tall" }],
       planterLayout: Array.from({ length: planterCount }, (_, i) => ({
         position: i + 1,
-        tall: "rosemary, upright 40cm silver-green",
-        mid: "lavender, purple spikes 30cm",
-        trail: "lobelia, cascading blue flowers"
+        tall: i % 2 === 0 ? "rosemary, silvery-green upright 40cm" : "lavender, purple spikes 35cm",
+        mid: i % 2 === 0 ? "pink geranium, round clusters 25cm" : "white alyssum, honey-scented carpet",
+        trail: i % 2 === 0 ? "blue lobelia, cascading" : "silver dichondra, flowing"
       })),
       soilPct: 60, perlitePct: 20, tuffPct: 20,
       designFacts: [],
@@ -111,28 +115,33 @@ planterLayout must have exactly ${planterCount} entries. Make each planter visua
       if (start === -1 || end === -1) throw new Error("no JSON found");
       const parsed = JSON.parse(cleaned.slice(start, end + 1));
       plan = { ...plan, ...parsed };
+      // Ensure layout length matches planterCount
+      if (!plan.planterLayout || plan.planterLayout.length === 0) {
+        plan.planterLayout = Array.from({ length: planterCount }, (_, i) => ({
+          position: i + 1, tall: "rosemary upright 40cm", mid: "geranium 25cm", trail: "lobelia cascading"
+        }));
+      }
     } catch (parseErr) {
       L("[3] parse error: " + parseErr + " using defaults");
     }
-    L("[3] planterColor: " + plan.planterColorEn + ", plants: " + plan.plants.length + ", layout: " + plan.planterLayout.length);
+    L("[3] planterColor: " + plan.planterColorEn + ", layout entries: " + plan.planterLayout.length);
 
-    // Build a rich, photorealistic DALL-E prompt from the layout
-    const planterDescs = plan.planterLayout.map((p, i) => {
-      const pos = i === 0 ? "leftmost" : i === plan.planterLayout.length - 1 ? "rightmost" : `planter ${i + 1}`;
-      return `${pos}: tall back - ${p.tall}; center - ${p.mid}; cascading over front edge - ${p.trail}`;
-    }).join(". ");
+    // Build rich per-planter DALL-E description on top of blueprint
+    const planterDescs = plan.planterLayout.slice(0, planterCount).map((p, i) => {
+      const posLabel = planterCount <= 3
+        ? (i === 0 ? "left planter" : i === planterCount - 1 ? "right planter" : "center planter")
+        : (i === 0 ? "leftmost planter" : i === planterCount - 1 ? "rightmost planter" : "planter " + (i + 1));
+      return posLabel + ": [back] " + p.tall + " | [center] " + p.mid + " | [cascading over front] " + p.trail;
+    }).join("; ");
 
     const dallePrompt = (
-      `Photorealistic image of a balcony garden. ` +
-      `Background: the architectural line drawing of the balcony must remain visible as a faint watermark underneath. ` +
-      `${planterCount} rectangular planters (60cm wide, 30cm deep, ${plan.planterColorEn} color) are placed in a row, ` +
-      `flush against the back wall, their long side parallel to the wall like window boxes. ` +
-      `Plants are lush and overflowing, established, full (2-3 seasons old). ` +
-      `Each planter has a unique combination: ${planterDescs}. ` +
-      `The overall scene is vibrant, colorful, professionally designed. ` +
-      `The balcony floor (${floor_color}) and wall (${wall_color}) are visible. ` +
-      `The railing (${railing_color}) is visible above and behind the planters. ` +
-      `Soft natural Mediterranean light, photographic quality, shallow depth of field.`
+      BLUEPRINT_BASE +
+      "PLANTERS: " + planterCount + " " + plan.planterColorEn + " rectangular planters in a row. " +
+      "Each planter is overflowing with lush, established plants (2-3 seasons old, full and dense). " +
+      "PLANT ARRANGEMENT (left to right): " + planterDescs + ". " +
+      "Plants are vibrant, colorful, varied in height and texture. " +
+      "Trailing plants spill dramatically over the front edges of the planters. " +
+      "The scene looks professionally designed, lush, and inviting."
     );
 
     L("[3] dallePrompt length: " + dallePrompt.length);
