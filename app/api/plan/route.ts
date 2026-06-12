@@ -24,13 +24,17 @@ export async function POST(req: NextRequest) {
 
   try {
     L("[1] parsing request");
-    const { blueprintUrl, width_m, depth_m, direction, sun_pct, garden_style, floor_color, wall_color, railing_color } = await req.json();
+    const { blueprintUrl, width_m, depth_m, direction, sun_pct, garden_style, floor_color, wall_color, railing_color, wall_height_m } = await req.json();
 
     if (!blueprintUrl)                  return NextResponse.json({ error: "missing blueprintUrl",  step: "validate", debug: { log } }, { status: 400 });
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "missing Anthropic key", step: "validate", debug: { log } }, { status: 500 });
 
     const planterCount = Math.min(8, Math.max(2, Math.floor(width_m / 0.9)));
-    L("[1] planterCount: " + planterCount + " for width " + width_m + "m");
+    // wall height with fallback - planters are 30cm tall, so ratio matters
+    const wallH = Math.min(Math.max(Number(wall_height_m) || 2.6, 2.0), 4.0);
+    // planters occupy ~30cm of wall height, leaving the rest exposed
+    const planterHeightPct = Math.round((0.30 / wallH) * 100);
+    L("[1] planterCount: " + planterCount + " wallH: " + wallH + "m planterPct: " + planterHeightPct + "%");
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest) {
 
     const userPrompt = `You are a professional garden designer. Design a balcony garden. Return JSON only.
 
-BALCONY: ${width_m}m wide, ${depth_m}m deep, ${direction}, ${sun_pct}% sun
+BALCONY: ${width_m}m wide, ${depth_m}m deep, ${direction}, ${sun_pct}% sun, back wall height ${wallH}m
 COLORS: floor=${floor_color}, walls=${wall_color}, railing=${railing_color}
 STYLE: ${styleGuide}
 SUN: ${sunGuide}
@@ -87,14 +91,9 @@ planterLayout MUST have exactly ${planterCount} entries with DIFFERENT plant com
 
     L("[3] parsing JSON");
     interface PlanResult {
-      planterColorHe: string;
-      planterColorEn: string;
-      plants: PlantChoice[];
-      planterLayout: PlanterLayout[];
-      soilPct: number;
-      perlitePct: number;
-      tuffPct: number;
-      designFacts: string[];
+      planterColorHe: string; planterColorEn: string;
+      plants: PlantChoice[]; planterLayout: PlanterLayout[];
+      soilPct: number; perlitePct: number; tuffPct: number; designFacts: string[];
     }
     let plan: PlanResult = {
       planterColorHe: "אפור אנתרציט", planterColorEn: "anthracite gray",
@@ -102,20 +101,17 @@ planterLayout MUST have exactly ${planterCount} entries with DIFFERENT plant com
       planterLayout: Array.from({ length: planterCount }, (_, i) => ({
         position: i + 1,
         tall: i % 2 === 0 ? "rosemary, silvery-green upright 40cm" : "lavender, purple spikes 35cm",
-        mid: i % 2 === 0 ? "pink geranium, round clusters 25cm" : "white alyssum, honey-scented carpet",
-        trail: i % 2 === 0 ? "blue lobelia, cascading" : "silver dichondra, flowing"
+        mid:  i % 2 === 0 ? "pink geranium, round clusters 25cm"   : "white alyssum, honey-scented carpet",
+        trail:i % 2 === 0 ? "blue lobelia, cascading"               : "silver dichondra, flowing"
       })),
-      soilPct: 60, perlitePct: 20, tuffPct: 20,
-      designFacts: [],
+      soilPct: 60, perlitePct: 20, tuffPct: 20, designFacts: [],
     };
     try {
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      const start = cleaned.indexOf("{");
-      const end   = cleaned.lastIndexOf("}");
+      const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
       if (start === -1 || end === -1) throw new Error("no JSON found");
       const parsed = JSON.parse(cleaned.slice(start, end + 1));
       plan = { ...plan, ...parsed };
-      // Ensure layout length matches planterCount
       if (!plan.planterLayout || plan.planterLayout.length === 0) {
         plan.planterLayout = Array.from({ length: planterCount }, (_, i) => ({
           position: i + 1, tall: "rosemary upright 40cm", mid: "geranium 25cm", trail: "lobelia cascading"
@@ -124,9 +120,9 @@ planterLayout MUST have exactly ${planterCount} entries with DIFFERENT plant com
     } catch (parseErr) {
       L("[3] parse error: " + parseErr + " using defaults");
     }
-    L("[3] planterColor: " + plan.planterColorEn + ", layout entries: " + plan.planterLayout.length);
+    L("[3] planterColor: " + plan.planterColorEn + ", layout: " + plan.planterLayout.length);
 
-    // Build rich per-planter DALL-E description on top of blueprint
+    // Build per-planter description with proportion anchoring
     const planterDescs = plan.planterLayout.slice(0, planterCount).map((p, i) => {
       const posLabel = planterCount <= 3
         ? (i === 0 ? "left planter" : i === planterCount - 1 ? "right planter" : "center planter")
@@ -134,14 +130,23 @@ planterLayout MUST have exactly ${planterCount} entries with DIFFERENT plant com
       return posLabel + ": [back] " + p.tall + " | [center] " + p.mid + " | [cascading over front] " + p.trail;
     }).join("; ");
 
+    // Proportion anchor: planters are 30cm tall on a wall_height_m wall
+    // This tells DALL-E exactly how large to draw them relative to the blueprint
+    const proportionAnchor = (
+      "PROPORTION RULE: The back wall in this drawing is " + wallH.toFixed(1) + "m tall. " +
+      "Each planter is exactly 30cm (0.3m) tall and 60cm wide - they should occupy only " + planterHeightPct + "% of the wall height. " +
+      "Draw planters small relative to the wall. The floor and most of the wall remain clearly visible above and below the planters. " +
+      "Plants can extend upward to max 50cm above planter rim (still well below the railing). "
+    );
+
     const dallePrompt = (
       BLUEPRINT_BASE +
-      "PLANTERS: " + planterCount + " " + plan.planterColorEn + " rectangular planters in a row. " +
-      "Each planter is overflowing with lush, established plants (2-3 seasons old, full and dense). " +
-      "PLANT ARRANGEMENT (left to right): " + planterDescs + ". " +
-      "Plants are vibrant, colorful, varied in height and texture. " +
-      "Trailing plants spill dramatically over the front edges of the planters. " +
-      "The scene looks professionally designed, lush, and inviting."
+      proportionAnchor +
+      "PLANTERS: " + planterCount + " " + plan.planterColorEn + " rectangular planters in a row, each 60cm wide x 30cm tall. " +
+      "Plants are lush and overflowing, established, full. " +
+      "ARRANGEMENT (left to right): " + planterDescs + ". " +
+      "Trailing plants spill dramatically over the front edges. " +
+      "The scene is vibrant, colorful, professionally designed."
     );
 
     L("[3] dallePrompt length: " + dallePrompt.length);
