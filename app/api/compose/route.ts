@@ -3,7 +3,6 @@ import { NextRequest } from "next/server";
 
 export const maxDuration = 300;
 
-// Safety net: if plan route didn't include blueprint instructions, prepend them
 const BLUEPRINT_SAFETY = (
   "This is a black and white architectural line drawing of a balcony. " +
   "Preserve this exact line drawing as the background. " +
@@ -108,10 +107,13 @@ export async function POST(req: NextRequest) {
           let ev: Record<string, unknown> = {};
           try { ev = JSON.parse(raw); } catch { continue; }
 
-          // partial image event
-          if (ev.type === "image_generation.partial_image" || ev.partial_image_index !== undefined) {
+          const evType = ev.type as string | undefined;
+          L("[event] " + (evType ?? "unknown"));
+
+          // partial image - edits endpoint uses image_edit.partial_image
+          if (evType === "image_edit.partial_image") {
             partialCount++;
-            const b64 = (ev.b64_json ?? ev.partial_image_b64) as string | undefined;
+            const b64 = ev.b64_json as string | undefined;
             if (b64) {
               lastPartialB64 = b64;
               L("[partial " + partialCount + "] " + Math.round(b64.length / 1024) + "KB");
@@ -119,24 +121,24 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // final image via data array (non-streaming fallback format)
+          // final image - edits endpoint uses image_edit.completed
+          if (evType === "image_edit.completed") {
+            const b64 = ev.b64_json as string | undefined;
+            if (b64) {
+              L("[final] " + Math.round(b64.length / 1024) + "KB");
+              await send({ type: "done", imageUrl: "data:image/jpeg;base64," + b64, log });
+              await writer.close();
+              return;
+            }
+          }
+
+          // fallback: non-streaming data array format
           if (Array.isArray(ev.data) && (ev.data[0] as Record<string, unknown>)?.b64_json) {
             const b64 = (ev.data[0] as Record<string, unknown>).b64_json as string;
             L("[final-data] " + Math.round(b64.length / 1024) + "KB");
             await send({ type: "done", imageUrl: "data:image/jpeg;base64," + b64, log });
             await writer.close();
             return;
-          }
-
-          // streaming completed event
-          if (ev.type === "image_generation.completed") {
-            const b64 = ev.b64_json as string | undefined;
-            if (b64) {
-              L("[final-stream] " + Math.round(b64.length / 1024) + "KB");
-              await send({ type: "done", imageUrl: "data:image/jpeg;base64," + b64, log });
-              await writer.close();
-              return;
-            }
           }
         }
       }
