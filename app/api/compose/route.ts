@@ -3,9 +3,14 @@ import { NextRequest } from "next/server";
 
 export const maxDuration = 300;
 
-// No longer prepend line-drawing instructions - plan/route.ts now builds the full prompt
-// This prefix is only a safety fallback for missing placement rules
-const PLACEMENT_SAFETY = "Place all planters flush against the back wall, long 60cm side parallel to wall like window boxes, railing visible above. ";
+// Safety net: if plan route didn't include blueprint instructions, prepend them
+const BLUEPRINT_SAFETY = (
+  "This is a black and white architectural line drawing of a balcony. " +
+  "Preserve this exact line drawing as the background. " +
+  "Do not redraw the floor, walls, or railing. " +
+  "Add lush colored plants and planters on top of the line drawing only. " +
+  "All planters flush against the back wall, long 60cm side PARALLEL to wall like window boxes. Railing visible above and behind. "
+);
 
 async function getBlueprintBuffer(blueprintUrl: string): Promise<Buffer> {
   if (blueprintUrl.startsWith("data:")) {
@@ -49,10 +54,9 @@ export async function POST(req: NextRequest) {
       const bpBuf = await getBlueprintBuffer(blueprintUrl);
       L("[2] buffer: " + bpBuf.length + " bytes");
 
-      // Add placement safety prefix only if not already in prompt
-      const hasPlacement = dallePrompt.includes("flush against the back wall") || dallePrompt.includes("parallel to wall");
-      const finalPrompt = hasPlacement ? dallePrompt : PLACEMENT_SAFETY + dallePrompt;
-      L("[3] prompt: " + finalPrompt.length + " chars");
+      const hasBlueprint = dallePrompt.includes("architectural line drawing") || dallePrompt.includes("line drawing of a balcony");
+      const finalPrompt = hasBlueprint ? dallePrompt : BLUEPRINT_SAFETY + dallePrompt;
+      L("[3] prompt: " + finalPrompt.length + " chars (blueprint prefix " + (hasBlueprint ? "already present" : "added") + ")");
 
       L("[4] building FormData (stream=true, partial_images=2)");
       const fd = new FormData();
@@ -137,7 +141,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // stream ended without explicit done event
       if (lastPartialB64) {
         L("[fallback] using last partial as final");
         await send({ type: "done", imageUrl: "data:image/jpeg;base64," + lastPartialB64, log });
