@@ -1,28 +1,39 @@
-// app/api/blueprint/route.ts
+// v3 - 2026-06-12 - explicit removal of BBQ grills, appliances, AC units + stronger "no invention" rule
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 300;
 
 const BLUEPRINT_PROMPT = `
-You are editing a balcony photo. Follow these two steps in order:
+You are editing a balcony photo. Follow these two steps exactly:
 
-STEP 1 - REMOVE ONLY (do not add, do not invent):
-Remove these elements if present:
-- Furniture: chairs, tables, sofas, shelves, storage boxes
-- All plants, trees, planters, pots of any kind
-- Rugs, curtains, textiles, laundry
-- Decorative objects, people, animals
-- Any movable or temporary item
-Keep exactly what is structurally fixed: floor, walls, ceiling, railing, columns, doors, windows.
-CRITICAL: Do NOT add walls, doors, windows, or architectural elements that are NOT visible in the photo.
-Only draw what you can actually see. If a wall is not in the photo, do not draw it.
+STEP 1 - REMOVE ALL OF THESE (leave a clean empty balcony):
+- ALL furniture: chairs, tables, sofas, benches, loungers, shelves, storage boxes, cabinets
+- ALL appliances: BBQ grills, barbecues, gas grills, electric grills, air conditioning units, fans, heaters
+- ALL plants: every plant, tree, flower, planter, pot, tray, hanging basket, garden bed
+- ALL textiles: rugs, mats, curtains, blinds, laundry, cushions, pillows
+- ALL objects: decorative items, lights, lanterns, bikes, strollers, toys, tools, equipment
+- ALL people and animals
+- Anything that is not permanently bolted to the structure
 
-STEP 2 - CONVERT TO LINE DRAWING:
-Render only the fixed structural elements that were visible in the original photo as a clean architectural line drawing:
+KEEP ONLY these permanent structural elements:
+- Floor surface (tiles, wood, concrete)
+- Walls (back wall, side walls)
+- Ceiling or roof overhang if present
+- Railing and its posts
+- Fixed columns or pillars
+- Permanently built-in windows or doors that are part of the wall structure
+
+CRITICAL RULES:
+- Do NOT invent or add walls, doors, windows, or any element not visible in the original photo
+- Do NOT fill in areas where objects were removed with guessed content
+- Leave removed areas as clean empty floor/wall
+
+STEP 2 - CONVERT TO ARCHITECTURAL LINE DRAWING:
+Render only the permanent structural elements as a clean line drawing:
 - White or warm-white background
-- Soft pencil lines showing only the real structure
-- Preserve exact perspective, proportions, and camera angle from the original photo
-- No color fill, no shading, no invented details
+- Light pencil-style lines, soft and clean
+- Preserve the exact same perspective, camera angle, and proportions as the original photo
+- No color, no shading, no texture fills, no decorative details
 `.trim();
 
 export async function POST(req: NextRequest) {
