@@ -47,7 +47,7 @@ async function compressImage(file: File): Promise<string> {
 function Header({ subtitle }: { subtitle: string }) {
   return (
     <div style={{ background:"#1A1714", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-      <span style={{ color:"#FAF7F2", fontSize:"15px", fontWeight:"300", letterSpacing:"3px" }}>HIBLOOM</span>
+      <span style={{ color:"#FAF7F2", fontSize:"15px", fontWeight:"300", letterSpacing:"3px" }}>משתלת רז</span>
       <span style={{ color:"rgba(250,247,242,0.35)", fontSize:"11px" }}>{subtitle}</span>
     </div>
   );
@@ -122,23 +122,29 @@ function NurseryFactsTicker() {
   );
 }
 
-function TipsScreen({ title, subtitle, facts, imageUrl }: { title:string; subtitle:string; facts:string[]; imageUrl?:string }) {
+function TipsScreen({ title, subtitle, facts, imageUrl, imageCaption, intervalMs }: { title:string; subtitle:string; facts:string[]; imageUrl?:string; imageCaption?:string; intervalMs?:number }) {
   const [idx, setIdx] = useState(0);
   const [vis, setVis] = useState(true);
+  const interval = intervalMs ?? 5000;
   useEffect(()=>{
     if (!facts.length) return;
     const t = setInterval(()=>{
       setVis(false);
       setTimeout(()=>{ setIdx(i=>(i+1)%facts.length); setVis(true); }, 400);
-    }, 5000);
+    }, interval);
     return ()=>clearInterval(t);
-  }, [facts]);
+  }, [facts, interval]);
   return (
     <div dir="rtl" style={{ display:"flex", flexDirection:"column", alignItems:"center", minHeight:"100vh", background:"radial-gradient(ellipse at 50% 40%,#2A3828 0%,#111 70%)", fontFamily:"sans-serif" }}>
       {imageUrl && (
-        <div style={{ width:"100%", maxHeight:"240px", overflow:"hidden", position:"relative" }}>
+        <div style={{ width:"100%", position:"relative" }}>
           <img src={imageUrl} alt="" style={{ width:"100%", objectFit:"cover", maxHeight:"240px", opacity:0.85, display:"block" }} />
           <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"60px", background:"linear-gradient(to bottom, transparent, #111)" }} />
+          {imageCaption && (
+            <div style={{ position:"absolute", bottom:"10px", right:0, left:0, textAlign:"center" }}>
+              <span style={{ fontSize:"11px", color:"rgba(250,248,245,0.55)", letterSpacing:"1px", fontWeight:"300" }}>{imageCaption}</span>
+            </div>
+          )}
         </div>
       )}
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flex:1, padding:"32px 24px 40px" }}>
@@ -162,11 +168,11 @@ function TipsScreen({ title, subtitle, facts, imageUrl }: { title:string; subtit
 }
 
 function LoadingScreen({ step }: { step:number }) {
-  const steps = [{ label:"מנתח את המרפסת...", time:"~10 שנ׳" },{ label:"מכין ניתוח...", time:"~3 שנ׳" }];
+  const steps = [{ label:"בוחנים את המרפסת שלך...", time:"~10 שנ׳" },{ label:"מכינים ניתוח מפורט...", time:"~3 שנ׳" }];
   return (
     <div dir="rtl" style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"radial-gradient(ellipse at 50% 40%,#2A3828 0%,#111 70%)", padding:"40px 24px", fontFamily:"sans-serif" }}>
       <Spinner emoji="🌿" />
-      <h2 style={{ color:"#FAF8F5", fontSize:"18px", marginBottom:"36px", fontWeight:"200", textAlign:"center" }}>מנתח את המרפסת שלך</h2>
+      <h2 style={{ color:"#FAF8F5", fontSize:"18px", marginBottom:"36px", fontWeight:"200", textAlign:"center" }}>בוחנים את המרפסת שלך</h2>
       <div style={{ width:"100%", maxWidth:"290px" }}>
         {steps.map((s,i)=>{
           const isDone=i<step, isActive=i===step;
@@ -304,7 +310,7 @@ function IdleScreen({ onFile, errorMsg, fileRef }: { onFile:(f:File)=>void; erro
             ))}
           </div>
         </div>
-        <p style={{ textAlign:"center", color:"rgba(139,125,107,0.3)", fontSize:"10px", marginTop:"18px", letterSpacing:"2px" }}>HIBLOOM · BALCONY DESIGN</p>
+        <p style={{ textAlign:"center", color:"rgba(139,125,107,0.3)", fontSize:"10px", marginTop:"18px", letterSpacing:"2px" }}>משתלת רז · BALCONY DESIGN</p>
       </div>
     </div>
   );
@@ -347,7 +353,7 @@ function ErrorScreen({ error, onReset }: { error: AppError; onReset: () => void 
   return (
     <div dir="rtl" style={{ background:"#FAF7F2", minHeight:"100vh", fontFamily:"sans-serif" }}>
       <div style={{ background:"#1A1714", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ color:"#FAF7F2", fontSize:"15px", fontWeight:"300", letterSpacing:"3px" }}>HIBLOOM</span>
+        <span style={{ color:"#FAF7F2", fontSize:"15px", fontWeight:"300", letterSpacing:"3px" }}>משתלת רז</span>
         <span style={{ color:"rgba(250,247,242,0.35)", fontSize:"11px" }}>שגיאה</span>
       </div>
       <div style={{ padding:"24px 16px" }}>
@@ -409,7 +415,7 @@ function OrderScreen({ timings }: { timings: Timings | null }) {
           </div>
         </div>
       )}
-      <p style={{ fontSize:"11px", color:"#C4B8A8", marginTop:"24px", letterSpacing:"2px" }}>HIBLOOM · BALCONY DESIGN</p>
+      <p style={{ fontSize:"11px", color:"#C4B8A8", marginTop:"24px", letterSpacing:"2px" }}>משתלת רז · BALCONY DESIGN</p>
     </div>
   );
 }
@@ -586,9 +592,9 @@ export default function Home() {
   };
 
   if (state==="analyzing") return <LoadingScreen step={step} />;
-  if (state==="waiting")   return <TipsScreen title="מכין את השרטוט" subtitle="עוד רגע ומתחילים לתכנן" facts={NURSERY_FACTS} imageUrl={photoDataUrl??undefined} />;
-  if (state==="planning")  return <TipsScreen title="קלוד מתכנן את הגינה שלך" subtitle="בוחר צמחים, מחשב פרספקטיבה..." facts={planningFacts.length ? planningFacts : NURSERY_FACTS} imageUrl={photoDataUrl??undefined} />;
-  if (state==="composing") return <TipsScreen title="מצייר את הגינה שלך" subtitle="DALL-E עובד על התמונה" facts={waitingFacts.length ? waitingFacts : NURSERY_FACTS} imageUrl={blueprintUrl??undefined} />;
+  if (state==="waiting")   return <TipsScreen title="מכינים את המרפסת שלך" subtitle="עוד רגע ומתחילים לתכנן" facts={NURSERY_FACTS} imageUrl={photoDataUrl??undefined} imageCaption="המרפסת שלך" />;
+  if (state==="planning")  return <TipsScreen title="צוות התכנון עובד על הגינה שלך" subtitle="בוחרים צמחים ומחשבים את הפריסה המושלמת" facts={planningFacts.length ? planningFacts : NURSERY_FACTS} imageUrl={photoDataUrl??undefined} imageCaption="המרפסת שלך" />;
+  if (state==="composing") return <TipsScreen title="מעצבים את הגינה שלך" subtitle="כמעט מוכן..." facts={waitingFacts.length ? waitingFacts : NURSERY_FACTS} imageUrl={blueprintUrl??undefined} imageCaption="ניקינו את המרפסת — עכשיו מציירים את הגינה" intervalMs={6000} />;
   if (state==="order")     return <OrderScreen timings={timings} />;
   if (state==="error")     return <ErrorScreen error={appError??{ message:errorMsg||"unknown error" }} onReset={handleReset} />;
   if (state==="result"&&composedUrl&&products) return <ResultScreen composedUrl={composedUrl} products={products} onOrder={()=>setState("order")} onReset={handleReset} />;
