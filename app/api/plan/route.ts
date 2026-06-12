@@ -8,17 +8,7 @@ const PRICES = { adanit_unit:189, plant_small:35, plant_medium:55, plant_large:8
 const PLANTER_VOLUME_L = 43.2;
 
 interface PlantChoice { nameHe: string; nameEn: string; totalCount: number; size: string; visualDesc: string; }
-
-const DALLE_PLACEMENT_RULES = (
-  "This is a black and white architectural line drawing of a balcony. " +
-  "Preserve this line drawing exactly as the background. " +
-  "Do not replace or redraw the floor, walls or railing. " +
-  "Only add the following colored elements on top of the existing line drawing. " +
-  "PLACEMENT RULES: planters must be flush against the back wall touching it, " +
-  "their long 60cm side running parallel to the wall like window boxes, " +
-  "NOT sticking out into the balcony, evenly spaced across the full width. " +
-  "The railing must remain visible above and behind the planters. "
-);
+interface PlanterLayout { position: number; tall: string; mid: string; trail: string; }
 
 export async function POST(req: NextRequest) {
   const log: string[] = [];
@@ -36,28 +26,49 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const userPrompt = `Create a detailed garden design for a balcony. Return JSON only.
+    const styleGuide = garden_style === "mediterranean"
+      ? "Mediterranean style: lavender, rosemary, thyme, sage, geranium, silver dusty miller. Warm purples, pinks, silvers."
+      : garden_style === "jungle"
+      ? "Tropical jungle style: coleus (vibrant colored leaves), caladium, asparagus fern, wandering jew, sweet potato vine. Bold colors, dramatic leaves."
+      : "Modern minimal style: ornamental grasses, succulents, echeveria, sedum, agave, white or pale flowers only. Clean, architectural.";
 
-BALCONY: ${width_m}m x ${depth_m}m, faces ${direction}, ${sun_pct}% sun, style=${garden_style}
+    const sunGuide = sun_pct > 70
+      ? "Full sun (>70%): drought-tolerant sun-lovers"
+      : sun_pct > 40
+      ? "Partial sun (40-70%): adaptable species"
+      : "Shade (<40%): shade-tolerant species only";
+
+    const userPrompt = `You are a world-class garden designer. Design a stunning balcony garden. Return JSON only.
+
+BALCONY: ${width_m}m wide, ${depth_m}m deep, faces ${direction}, ${sun_pct}% sun
 COLORS: floor=${floor_color}, walls=${wall_color}, railing=${railing_color}
-PLANTERS: exactly ${planterCount} rectangular 60x30x30cm planters
+STYLE: ${styleGuide}
+SUN: ${sunGuide}
+PLANTERS: exactly ${planterCount} rectangular planters, 60cm wide x 30cm deep x 30cm tall, flush to back wall
 
-INSTRUCTIONS:
-1. Choose planterColorHe (Hebrew) and planterColorEn (English) matching balcony colors: anthracite gray / light gray / terracotta / sand beige
-2. Choose 3-5 plant species. Sun >70%: lavender/rosemary/geranium/sage. 40-70%: impatiens/begonia/coleus. <40%: ferns/browallia. Mediterranean: lavender/rosemary/thyme. Modern: grasses/succulents. Jungle: coleus/caladium/ferns. Mix tall, medium and trailing/cascading species.
-3. Choose soilPct, perlitePct, tuffPct (must sum to 100). Drought-tolerant=60/20/20, flowering=70/20/10, succulents=40/40/20, shade=80/10/10.
-4. Write dallePrompt: a rich detailed description for DALL-E. Start with this exact sentence: "${DALLE_PLACEMENT_RULES}" Then describe: the ${planterCount} planters with their color, and a VARIED arrangement with specific plant combinations per planter creating visual rhythm. Vary heights (tall centerpieces + low cascading + trailing), colors, and textures across the planters. Be specific about which plant goes in which planter position. Make it lush and wow.
-5. Write designFacts: exactly 10 short Hebrew facts about THIS specific garden design. Facts about plant choices, colors, quantities, soil mix, expected bloom seasons, scents, maintenance tips. Each fact max 12 words. Plain text, no special characters.
+DESIGN RULES:
+- Each planter has a UNIQUE combination: 1 tall focal plant (back) + 1 mid flowering plant (center) + 1 trailing/cascading plant (front edge)
+- Vary colors dramatically between planters - no two adjacent planters the same
+- Create visual rhythm: alternate heights and colors across the row
+- Plants look lush and established (2-3 seasons old, full, overflowing)
 
-Return ONLY this JSON:
+Choose a planter color that contrasts beautifully with: walls=${wall_color}, floor=${floor_color}
+
+Return ONLY this JSON (no markdown):
 {
-  "planterColorHe": "...",
-  "planterColorEn": "...",
-  "plants": [{"nameHe": "...", "nameEn": "...", "totalCount": 4, "size": "medium", "visualDesc": "purple flowering lavender 35cm tall dense silver-green foliage"}],
+  "planterColorHe": "Hebrew color name",
+  "planterColorEn": "English color name e.g. anthracite gray / terracotta / sand beige / slate blue",
+  "plants": [
+    {"nameHe": "Hebrew name", "nameEn": "English name", "totalCount": 6, "size": "medium", "visualDesc": "specific visual: color, height, form e.g. deep purple spike 40cm upright"}
+  ],
+  "planterLayout": [
+    {"position": 1, "tall": "plant name + visual", "mid": "plant name + visual", "trail": "plant name + visual"}
+  ],
   "soilPct": 60, "perlitePct": 20, "tuffPct": 20,
-  "dallePrompt": "${DALLE_PLACEMENT_RULES}[DETAILED VARIED PLANT DESCRIPTION HERE]",
-  "designFacts": ["עובדה 1", "עובדה 2", "עובדה 3", "עובדה 4", "עובדה 5", "עובדה 6", "עובדה 7", "עובדה 8", "עובדה 9", "עובדה 10"]
-}`;
+  "designFacts": ["Hebrew fact max 12 words", "...10 total facts..."]
+}
+
+planterLayout must have exactly ${planterCount} entries. Make each planter visually distinct.`;
 
     L("[2] calling Claude Haiku");
     const response = await client.messages.create({
@@ -71,11 +82,26 @@ Return ONLY this JSON:
     L("[2] response length: " + raw.length);
 
     L("[3] parsing JSON");
-    let plan: { planterColorHe: string; planterColorEn: string; plants: PlantChoice[]; soilPct: number; perlitePct: number; tuffPct: number; dallePrompt: string; designFacts: string[] } = {
+    interface PlanResult {
+      planterColorHe: string;
+      planterColorEn: string;
+      plants: PlantChoice[];
+      planterLayout: PlanterLayout[];
+      soilPct: number;
+      perlitePct: number;
+      tuffPct: number;
+      designFacts: string[];
+    }
+    let plan: PlanResult = {
       planterColorHe: "אפור אנתרציט", planterColorEn: "anthracite gray",
       plants: [{ nameHe: "לבנדר", nameEn: "lavender", totalCount: planterCount * 2, size: "medium", visualDesc: "purple flowering lavender 30cm tall" }],
+      planterLayout: Array.from({ length: planterCount }, (_, i) => ({
+        position: i + 1,
+        tall: "rosemary, upright 40cm silver-green",
+        mid: "lavender, purple spikes 30cm",
+        trail: "lobelia, cascading blue flowers"
+      })),
       soilPct: 60, perlitePct: 20, tuffPct: 20,
-      dallePrompt: DALLE_PLACEMENT_RULES + "Place " + planterCount + " anthracite planters with lavender and rosemary, lush and full.",
       designFacts: [],
     };
     try {
@@ -88,7 +114,28 @@ Return ONLY this JSON:
     } catch (parseErr) {
       L("[3] parse error: " + parseErr + " using defaults");
     }
-    L("[3] plan: " + plan.planterColorEn + ", " + plan.plants.length + " species, facts: " + plan.designFacts.length);
+    L("[3] planterColor: " + plan.planterColorEn + ", plants: " + plan.plants.length + ", layout: " + plan.planterLayout.length);
+
+    // Build a rich, photorealistic DALL-E prompt from the layout
+    const planterDescs = plan.planterLayout.map((p, i) => {
+      const pos = i === 0 ? "leftmost" : i === plan.planterLayout.length - 1 ? "rightmost" : `planter ${i + 1}`;
+      return `${pos}: tall back - ${p.tall}; center - ${p.mid}; cascading over front edge - ${p.trail}`;
+    }).join(". ");
+
+    const dallePrompt = (
+      `Photorealistic image of a balcony garden. ` +
+      `Background: the architectural line drawing of the balcony must remain visible as a faint watermark underneath. ` +
+      `${planterCount} rectangular planters (60cm wide, 30cm deep, ${plan.planterColorEn} color) are placed in a row, ` +
+      `flush against the back wall, their long side parallel to the wall like window boxes. ` +
+      `Plants are lush and overflowing, established, full (2-3 seasons old). ` +
+      `Each planter has a unique combination: ${planterDescs}. ` +
+      `The overall scene is vibrant, colorful, professionally designed. ` +
+      `The balcony floor (${floor_color}) and wall (${wall_color}) are visible. ` +
+      `The railing (${railing_color}) is visible above and behind the planters. ` +
+      `Soft natural Mediterranean light, photographic quality, shallow depth of field.`
+    );
+
+    L("[3] dallePrompt length: " + dallePrompt.length);
 
     L("[4] calculating products");
     const items: { name: string; qty: number; unitPrice: number; total: number }[] = [];
@@ -115,7 +162,7 @@ Return ONLY this JSON:
     L("[4] total: " + grandTotal + " ILS, " + items.length + " items");
 
     return NextResponse.json({
-      dallePrompt: plan.dallePrompt,
+      dallePrompt,
       waitingFacts: plan.designFacts ?? [],
       products: { items, grandTotal },
       debug: { log }
