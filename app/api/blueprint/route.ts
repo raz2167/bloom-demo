@@ -6,21 +6,23 @@ export const maxDuration = 300;
 const BLUEPRINT_PROMPT = `
 You are editing a balcony photo. Follow these two steps in order:
 
-STEP 1 - REMOVE (do not add anything):
-Remove these elements if they appear in the photo:
-- Furniture: chairs, tables, sofas, shelves, storage
-- Plants, trees, planters of any kind
-- Rugs, curtains, textiles
+STEP 1 - REMOVE ONLY (do not add, do not invent):
+Remove these elements if present:
+- Furniture: chairs, tables, sofas, shelves, storage boxes
+- All plants, trees, planters, pots of any kind
+- Rugs, curtains, textiles, laundry
 - Decorative objects, people, animals
 - Any movable or temporary item
-Do NOT remove: floor, walls, ceiling, railing, columns, doors, windows, fixed built-in elements.
+Keep exactly what is structurally fixed: floor, walls, ceiling, railing, columns, doors, windows.
+CRITICAL: Do NOT add walls, doors, windows, or architectural elements that are NOT visible in the photo.
+Only draw what you can actually see. If a wall is not in the photo, do not draw it.
 
 STEP 2 - CONVERT TO LINE DRAWING:
-Render what remains as a clean architectural line drawing:
+Render only the fixed structural elements that were visible in the original photo as a clean architectural line drawing:
 - White or warm-white background
-- Soft pencil lines, no harsh black
-- Preserve exact perspective and proportions
-- No color fill, no shading beyond subtle depth lines
+- Soft pencil lines showing only the real structure
+- Preserve exact perspective, proportions, and camera angle from the original photo
+- No color fill, no shading, no invented details
 `.trim();
 
 export async function POST(req: NextRequest) {
