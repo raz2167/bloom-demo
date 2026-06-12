@@ -1,4 +1,4 @@
-// v6 - 2026-06-12 - fix planter shape (2:1 ratio), fix plant arrangement (side-by-side not stacked)
+// v7 - 2026-06-12 - fix planter placement: force against back wall at floor-wall junction
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -11,11 +11,14 @@ interface PlantChoice { nameHe: string; nameEn: string; totalCount: number; size
 interface PlanterLayout { position: number; left: string; center: string; right: string; }
 
 const BLUEPRINT_BASE = (
-  "This is a black and white architectural line drawing of a balcony. " +
-  "Preserve this exact line drawing as the background. " +
-  "Do not redraw the floor, walls, or railing. " +
-  "Add lush colored plants and planters on top of the line drawing only. " +
-  "PLACEMENT: all planters flush against the back wall, long 60cm side PARALLEL to wall like window boxes, NOT sticking into the balcony. Railing visible above and behind. "
+  "This is a black and white architectural line drawing of a balcony viewed in perspective. " +
+  "Preserve this exact line drawing as the background. Do not redraw any structural elements. " +
+  "Add colored plants and planters on top of the line drawing only. " +
+  "CRITICAL PLACEMENT: The planters must be placed exactly where the floor meets the back wall — " +
+  "touching the base of the back wall, sitting on the floor right against it. " +
+  "In perspective view this means the planters appear near the TOP of the floor area (far end), not in the middle or foreground. " +
+  "The planters' back face touches the wall. The long 60cm side runs parallel to the wall. " +
+  "The railing is visible above the planters in the background. "
 );
 
 const COLOR_RHYTHMS: Record<number, string> = {
@@ -69,17 +72,15 @@ PLANTERS: exactly ${planterCount} rectangular 60x30x30cm planters
 MANDATORY COLOR DIVERSITY:
 ${colorRhythm}
 
-PLANT ARRANGEMENT RULES - this is critical:
-- Each planter contains 2-3 plants placed SIDE BY SIDE horizontally (not stacked vertically)
-- LEFT side of planter: 1 plant species
-- CENTER of planter: 1 plant species (can be taller)
-- RIGHT side of planter: 1 plant species (can trail over the front edge)
-- Plants grow naturally upward from the soil - they are NOT on shelves or layers
-- The visual effect is a natural garden, not a tiered display
+PLANT ARRANGEMENT (side by side within each planter):
+- LEFT side: 1 trailing or low plant
+- CENTER: 1 upright or taller plant
+- RIGHT side: 1 mounding or flowering plant
+- All plants grow from soil, side by side horizontally — NOT stacked vertically
 
 STRICT PROHIBITIONS:
-- NO two adjacent planters may have the same species
-- NO monotonous repetition across the row
+- NO two adjacent planters with the same species
+- NO repetition across the row
 
 Return ONLY this JSON:
 {
@@ -89,7 +90,7 @@ Return ONLY this JSON:
     {"nameHe": "Hebrew name", "nameEn": "English name", "totalCount": 6, "size": "medium", "visualDesc": "specific: deep purple spikes 40cm"}
   ],
   "planterLayout": [
-    {"position": 1, "left": "lobelia, blue cascading over front edge", "center": "rosemary, silvery-green upright 40cm", "right": "pink geranium, round clusters 25cm"},
+    {"position": 1, "left": "blue lobelia, cascading over front edge", "center": "rosemary, silvery-green upright 40cm", "right": "pink geranium, round clusters 25cm"},
     {"position": 2, "left": "silver dichondra, trailing", "center": "lavender, purple spikes 35cm", "right": "orange calibrachoa, mounding"}
   ],
   "soilPct": 60, "perlitePct": 20, "tuffPct": 20,
@@ -124,10 +125,10 @@ planterLayout MUST have exactly ${planterCount} entries. Every planter MUST diff
           { left:"silver dichondra, trailing", center:"lavender, purple spikes 35cm", right:"orange calibrachoa, mounding" },
           { left:"green-gold creeping jenny, trailing", center:"ornamental grass, lime arching 40cm", right:"white alyssum, mounding fragrant" },
           { left:"red verbena, trailing stems", center:"sage, blue-purple upright 40cm", right:"coral impatiens, mounding" },
-          { left:"purple sweet potato vine, dramatic trailing", center:"coleus, burgundy-gold leaves 35cm", right:"yellow lantana, round clusters" },
+          { left:"purple sweet potato vine, trailing", center:"coleus, burgundy-gold leaves 35cm", right:"yellow lantana, round clusters" },
           { left:"yellow bidens, feathery cascade", center:"dusty miller, silver upright 35cm", right:"magenta petunia, trumpet flowers" },
           { left:"coral creeping zinnia, trailing", center:"lemon grass, architectural 45cm", right:"white bacopa, tiny star flowers" },
-          { left:"variegated ivy, cascading green-white", center:"caladium, bold patterned leaves 35cm", right:"browallia, blue star flowers" },
+          { left:"variegated ivy, cascading", center:"caladium, bold patterned leaves 35cm", right:"browallia, blue star flowers" },
         ];
         const p = palettes[i % palettes.length];
         return { position: i + 1, left: p.left, center: p.center, right: p.right };
@@ -148,31 +149,28 @@ planterLayout MUST have exactly ${planterCount} entries. Every planter MUST diff
     }
     L("[3] planterColor: " + plan.planterColorEn + ", layout: " + plan.planterLayout.length);
 
-    // Build per-planter description - horizontal side-by-side arrangement
     const planterDescs = plan.planterLayout.slice(0, planterCount).map((p, i) => {
       const posLabel = planterCount <= 3
         ? (i === 0 ? "left planter" : i === planterCount - 1 ? "right planter" : "center planter")
         : (i === 0 ? "leftmost planter" : i === planterCount - 1 ? "rightmost planter" : "planter " + (i + 1));
-      return posLabel + ": left-side=" + p.left + ", center=" + p.center + ", right-side=" + p.right;
+      return posLabel + ": left=" + p.left + ", center=" + p.center + ", right=" + p.right;
     }).join("; ");
 
     const proportionAnchor = (
-      "PROPORTION RULE: The back wall is " + wallH.toFixed(1) + "m tall. " +
-      "Each planter is a WIDE RECTANGULAR WINDOW BOX: 60cm wide and only 30cm tall (2:1 width-to-height ratio, much wider than tall). " +
-      "Planters occupy only " + planterHeightPct + "% of the wall height. " +
-      "Draw them as low wide boxes, not cubes. The floor and wall remain clearly visible. " +
-      "Plants grow upward from soil to max 50cm above planter rim. "
+      "PROPORTION: Wall is " + wallH.toFixed(1) + "m tall. " +
+      "Each planter is a wide flat window box: 60cm wide, 30cm tall (2:1 ratio, clearly wider than tall). " +
+      "Planters occupy only " + planterHeightPct + "% of wall height. " +
+      "Plants extend upward max 50cm above planter rim. "
     );
 
     const dallePrompt = (
       BLUEPRINT_BASE +
       proportionAnchor +
-      "PLANTERS: " + planterCount + " " + plan.planterColorEn + " wide rectangular window boxes in a row. " +
-      "Each box is wider than tall (60cm wide, 30cm tall). " +
-      "Plants are arranged SIDE BY SIDE within each planter, growing naturally from the soil - not stacked in layers. " +
-      "Plants are lush and full (2-3 seasons old). " +
+      "PLANTERS: " + planterCount + " " + plan.planterColorEn + " wide flat window boxes in a row at the base of the back wall. " +
+      "They sit ON the floor touching the back wall — positioned at the far end of the balcony in the perspective view. " +
+      "Plants grow upward from the soil, arranged side by side (not layered). " +
       "ARRANGEMENT left to right: " + planterDescs + ". " +
-      "The overall scene is vibrant and colorful with clear visual rhythm and variety across planters."
+      "Lush, full, vibrant, colorful. Each planter visually distinct from its neighbors."
     );
 
     L("[3] dallePrompt length: " + dallePrompt.length);
