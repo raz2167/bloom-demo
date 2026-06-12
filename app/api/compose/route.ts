@@ -1,93 +1,172 @@
 // app/api/compose/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 export const maxDuration = 300;
 
-// Safety net: always prepend blueprint-preserve + floor placement instruction
 const BLUEPRINT_PREFIX = "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace or redraw the floor, walls or railing. All planters must be placed flush against the back wall, touching it, their long 60cm side running PARALLEL to the wall like window boxes - NOT sticking out into the balcony. The railing is visible above and behind the planters. Only add the following colored elements on top of the existing line drawing: ";
 
-async function getBlueprintBuffer(blueprintUrl: string): Promise<Buffer> {
+async function getBlueprintBase64(blueprintUrl: string): Promise<{ b64: string; mime: string }> {
   if (blueprintUrl.startsWith("data:")) {
     const comma = blueprintUrl.indexOf(",");
     if (comma === -1) throw new Error("invalid data URL");
-    return Buffer.from(blueprintUrl.slice(comma + 1), "base64");
+    const mime = blueprintUrl.slice(5, blueprintUrl.indexOf(";"));
+    return { b64: blueprintUrl.slice(comma + 1), mime: mime || "image/png" };
   }
   const r = await fetch(blueprintUrl);
   if (!r.ok) throw new Error("blueprint download failed: " + r.status);
-  return Buffer.from(await r.arrayBuffer());
+  const buf = await r.arrayBuffer();
+  const b64 = Buffer.from(buf).toString("base64");
+  const ct = r.headers.get("content-type") || "image/png";
+  return { b64, mime: ct.split(";")[0] };
+}
+
+function sseEvent(data: Record<string, unknown>): string {
+  return "data: " + JSON.stringify(data) + "\n\n";
 }
 
 export async function POST(req: NextRequest) {
   const log: string[] = [];
   const L = (m: string) => { console.log(m); log.push(m); };
 
-  try {
-    L("[1] parsing request");
-    const { blueprintUrl, dallePrompt } = await req.json() as { blueprintUrl: string; dallePrompt: string };
+  const encoder = new TextEncoder();
+  const stream = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = stream.writable.getWriter();
 
-    if (!blueprintUrl)               return NextResponse.json({ error: "missing blueprintUrl", step: "validate", debug: { log } }, { status: 400 });
-    if (!dallePrompt)                return NextResponse.json({ error: "missing dallePrompt",  step: "validate", debug: { log } }, { status: 400 });
-    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "missing OpenAI key",  step: "validate", debug: { log } }, { status: 500 });
+  const send = async (data: Record<string, unknown>) => {
+    await writer.write(encoder.encode(sseEvent(data)));
+  };
 
-    L("[2] extracting blueprint buffer");
-    const bpBuf = await getBlueprintBuffer(blueprintUrl);
-    L("[2] buffer: " + bpBuf.length + " bytes");
+  (async () => {
+    try {
+      L("[1] parsing request");
+      const { blueprintUrl, dallePrompt } = await req.json() as { blueprintUrl: string; dallePrompt: string };
 
-    // Prepend blueprint-preserve prefix if not already present
-    const alreadyHasPrefix = dallePrompt.startsWith("This is a black and white architectural line drawing");
-    const finalPrompt = alreadyHasPrefix ? dallePrompt : BLUEPRINT_PREFIX + dallePrompt;
-    L("[3] prompt length: " + finalPrompt.length + " chars (prefix " + (alreadyHasPrefix ? "already present" : "added") + ")");
+      if (!blueprintUrl || !dallePrompt || !process.env.OPENAI_API_KEY) {
+        await send({ type: "error", message: "missing required fields", log });
+        await writer.close();
+        return;
+      }
 
-    L("[4] building FormData");
-    const fd = new FormData();
-    fd.append("model",                "gpt-image-2");
-    fd.append("image[]",              new Blob([new Uint8Array(bpBuf)], { type: "image/png" }), "blueprint.png");
-    fd.append("prompt",               finalPrompt);
-    fd.append("n",                    "1");
-    fd.append("size",                 "1024x1024");
-    fd.append("quality",              "low");
-    fd.append("output_format",        "jpeg");
-    fd.append("output_compression",   "80");
+      L("[2] extracting blueprint");
+      const { b64, mime } = await getBlueprintBase64(blueprintUrl);
+      L("[2] blueprint: " + Math.round(b64.length / 1024) + "KB mime=" + mime);
 
-    L("[5] calling DALL-E (quality=low, format=jpeg, compression=80)");
-    const dr = await fetch("https://api.openai.com/v1/images/edits", {
-      method:  "POST",
-      headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
-      body:    fd,
-    });
+      const alreadyHasPrefix = dallePrompt.startsWith("This is a black and white architectural line drawing");
+      const finalPrompt = alreadyHasPrefix ? dallePrompt : BLUEPRINT_PREFIX + dallePrompt;
+      L("[3] prompt: " + finalPrompt.length + " chars");
 
-    L("[6] DALL-E status: " + dr.status);
+      L("[4] calling Responses API (streaming, partial_images=2)");
+      const body = {
+        model: "gpt-4o",
+        stream: true,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_image", image_url: "data:" + mime + ";base64," + b64 },
+              { type: "input_text", text: finalPrompt },
+            ],
+          },
+        ],
+        tools: [
+          {
+            type: "image_generation",
+            quality: "low",
+            size: "1024x1024",
+            output_format: "jpeg",
+            output_compression: 80,
+            partial_images: 2,
+          },
+        ],
+      };
 
-    if (!dr.ok) {
-      const errText = await dr.text();
-      L("[6] error: " + errText.substring(0, 300));
-      return NextResponse.json({ error: "DALL-E error " + dr.status, step: "dalle_call", debug: { log } }, { status: 500 });
+      const dr = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + process.env.OPENAI_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      L("[5] Responses API status: " + dr.status);
+
+      if (!dr.ok || !dr.body) {
+        const errText = await dr.text();
+        L("[5] error: " + errText.substring(0, 300));
+        await send({ type: "error", message: "Responses API error " + dr.status, log });
+        await writer.close();
+        return;
+      }
+
+      const reader = dr.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      let partialCount = 0;
+      let finalB64 = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") continue;
+          let ev: Record<string, unknown> = {};
+          try { ev = JSON.parse(raw); } catch { continue; }
+
+          const evType = ev.type as string | undefined;
+
+          if (evType === "response.image_generation_call.partial_image") {
+            partialCount++;
+            const b64Partial = ev.partial_image_b64 as string | undefined;
+            if (b64Partial) {
+              L("[partial " + partialCount + "] size=" + Math.round(b64Partial.length / 1024) + "KB");
+              await send({
+                type: "partial",
+                imageUrl: "data:image/jpeg;base64," + b64Partial,
+                index: partialCount,
+              });
+            }
+          }
+
+          if (evType === "response.image_generation_call.completed") {
+            const result = ev.result as string | undefined;
+            if (result) {
+              finalB64 = result;
+              L("[final] size=" + Math.round(finalB64.length / 1024) + "KB");
+            }
+          }
+        }
+      }
+
+      if (finalB64) {
+        await send({ type: "done", imageUrl: "data:image/jpeg;base64," + finalB64, log });
+      } else if (partialCount > 0) {
+        L("[fallback] using last partial as final");
+        await send({ type: "done", imageUrl: null, log });
+      } else {
+        await send({ type: "error", message: "no image generated", log });
+      }
+
+    } catch (err: unknown) {
+      const m = err instanceof Error ? err.message : String(err);
+      log.push("CATCH: " + m);
+      await send({ type: "error", message: m, log }).catch(() => null);
+    } finally {
+      await writer.close().catch(() => null);
     }
+  })();
 
-    L("[7] parsing response");
-    const dd = await dr.json();
-    L("[7] data items: " + (dd.data?.length ?? 0));
-
-    if (dd.data?.[0]?.url) {
-      L("[8] returning URL");
-      return NextResponse.json({ imageUrl: dd.data[0].url, debug: { log } });
-    }
-
-    if (dd.data?.[0]?.b64_json) {
-      const b64 = dd.data[0].b64_json as string;
-      L("[8] returning b64, length: " + b64.length);
-      return new Response(
-        JSON.stringify({ imageUrl: "data:image/jpeg;base64," + b64, debug: { log } }),
-        { headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    L("[8] no image in response");
-    return NextResponse.json({ error: "DALL-E returned no image", step: "dalle_parse", debug: { log } }, { status: 500 });
-
-  } catch (err: unknown) {
-    const m = err instanceof Error ? err.message : String(err);
-    L("CATCH: " + m);
-    return NextResponse.json({ error: m, step: "catch", debug: { log } }, { status: 500 });
-  }
+  return new Response(stream.readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
 }
