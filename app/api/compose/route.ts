@@ -5,19 +5,15 @@ export const maxDuration = 300;
 
 const BLUEPRINT_PREFIX = "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace or redraw the floor, walls or railing. All planters must be placed flush against the back wall, touching it, their long 60cm side running PARALLEL to the wall like window boxes - NOT sticking out into the balcony. The railing is visible above and behind the planters. Only add the following colored elements on top of the existing line drawing: ";
 
-async function getBlueprintBase64(blueprintUrl: string): Promise<{ b64: string; mime: string }> {
+async function getBlueprintBuffer(blueprintUrl: string): Promise<Buffer> {
   if (blueprintUrl.startsWith("data:")) {
     const comma = blueprintUrl.indexOf(",");
     if (comma === -1) throw new Error("invalid data URL");
-    const mime = blueprintUrl.slice(5, blueprintUrl.indexOf(";"));
-    return { b64: blueprintUrl.slice(comma + 1), mime: mime || "image/png" };
+    return Buffer.from(blueprintUrl.slice(comma + 1), "base64");
   }
   const r = await fetch(blueprintUrl);
   if (!r.ok) throw new Error("blueprint download failed: " + r.status);
-  const buf = await r.arrayBuffer();
-  const b64 = Buffer.from(buf).toString("base64");
-  const ct = r.headers.get("content-type") || "image/png";
-  return { b64, mime: ct.split(";")[0] };
+  return Buffer.from(await r.arrayBuffer());
 }
 
 function sseEvent(data: Record<string, unknown>): string {
@@ -47,54 +43,40 @@ export async function POST(req: NextRequest) {
         return;
       }
 
-      L("[2] extracting blueprint");
-      const { b64, mime } = await getBlueprintBase64(blueprintUrl);
-      L("[2] blueprint: " + Math.round(b64.length / 1024) + "KB mime=" + mime);
+      L("[2] extracting blueprint buffer");
+      const bpBuf = await getBlueprintBuffer(blueprintUrl);
+      L("[2] buffer: " + bpBuf.length + " bytes");
 
       const alreadyHasPrefix = dallePrompt.startsWith("This is a black and white architectural line drawing");
       const finalPrompt = alreadyHasPrefix ? dallePrompt : BLUEPRINT_PREFIX + dallePrompt;
       L("[3] prompt: " + finalPrompt.length + " chars");
 
-      L("[4] calling Responses API (streaming, partial_images=2)");
-      const body = {
-        model: "gpt-4o",
-        stream: true,
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_image", image_url: "data:" + mime + ";base64," + b64 },
-              { type: "input_text", text: finalPrompt },
-            ],
-          },
-        ],
-        tools: [
-          {
-            type: "image_generation",
-            quality: "low",
-            size: "1024x1024",
-            output_format: "jpeg",
-            output_compression: 80,
-            partial_images: 2,
-          },
-        ],
-      };
+      L("[4] building FormData (stream=true, partial_images=2)");
+      const fd = new FormData();
+      fd.append("model",              "gpt-image-2");
+      fd.append("image[]",            new Blob([new Uint8Array(bpBuf)], { type: "image/png" }), "blueprint.png");
+      fd.append("prompt",             finalPrompt);
+      fd.append("n",                  "1");
+      fd.append("size",               "1024x1024");
+      fd.append("quality",            "low");
+      fd.append("output_format",      "jpeg");
+      fd.append("output_compression", "80");
+      fd.append("stream",             "true");
+      fd.append("partial_images",     "2");
 
-      const dr = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + process.env.OPENAI_API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+      L("[5] calling DALL-E edits (streaming)");
+      const dr = await fetch("https://api.openai.com/v1/images/edits", {
+        method:  "POST",
+        headers: { Authorization: "Bearer " + process.env.OPENAI_API_KEY },
+        body:    fd,
       });
 
-      L("[5] Responses API status: " + dr.status);
+      L("[5] status: " + dr.status);
 
       if (!dr.ok || !dr.body) {
         const errText = await dr.text();
         L("[5] error: " + errText.substring(0, 300));
-        await send({ type: "error", message: "Responses API error " + dr.status, log });
+        await send({ type: "error", message: "DALL-E error " + dr.status, log });
         await writer.close();
         return;
       }
@@ -103,7 +85,7 @@ export async function POST(req: NextRequest) {
       const dec = new TextDecoder();
       let buf = "";
       let partialCount = 0;
-      let finalB64 = "";
+      let lastPartialB64 = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -119,36 +101,43 @@ export async function POST(req: NextRequest) {
           let ev: Record<string, unknown> = {};
           try { ev = JSON.parse(raw); } catch { continue; }
 
-          const evType = ev.type as string | undefined;
-
-          if (evType === "response.image_generation_call.partial_image") {
+          // partial image event
+          if (ev.type === "image_generation.partial_image" || ev.partial_image_index !== undefined) {
             partialCount++;
-            const b64Partial = ev.partial_image_b64 as string | undefined;
-            if (b64Partial) {
-              L("[partial " + partialCount + "] size=" + Math.round(b64Partial.length / 1024) + "KB");
-              await send({
-                type: "partial",
-                imageUrl: "data:image/jpeg;base64," + b64Partial,
-                index: partialCount,
-              });
+            const b64 = (ev.b64_json ?? ev.partial_image_b64) as string | undefined;
+            if (b64) {
+              lastPartialB64 = b64;
+              L("[partial " + partialCount + "] " + Math.round(b64.length / 1024) + "KB");
+              await send({ type: "partial", imageUrl: "data:image/jpeg;base64," + b64, index: partialCount });
             }
           }
 
-          if (evType === "response.image_generation_call.completed") {
-            const result = ev.result as string | undefined;
-            if (result) {
-              finalB64 = result;
-              L("[final] size=" + Math.round(finalB64.length / 1024) + "KB");
+          // final image (non-streaming event format: data array)
+          if (Array.isArray(ev.data) && ev.data[0]?.b64_json) {
+            const b64 = ev.data[0].b64_json as string;
+            L("[final-data] " + Math.round(b64.length / 1024) + "KB");
+            await send({ type: "done", imageUrl: "data:image/jpeg;base64," + b64, log });
+            await writer.close();
+            return;
+          }
+
+          // streaming completed event
+          if (ev.type === "image_generation.completed" || (ev.b64_json && !ev.partial_image_index)) {
+            const b64 = ev.b64_json as string | undefined;
+            if (b64) {
+              L("[final-stream] " + Math.round(b64.length / 1024) + "KB");
+              await send({ type: "done", imageUrl: "data:image/jpeg;base64," + b64, log });
+              await writer.close();
+              return;
             }
           }
         }
       }
 
-      if (finalB64) {
-        await send({ type: "done", imageUrl: "data:image/jpeg;base64," + finalB64, log });
-      } else if (partialCount > 0) {
+      // stream ended — use last partial as final if no explicit done received
+      if (lastPartialB64) {
         L("[fallback] using last partial as final");
-        await send({ type: "done", imageUrl: null, log });
+        await send({ type: "done", imageUrl: "data:image/jpeg;base64," + lastPartialB64, log });
       } else {
         await send({ type: "error", message: "no image generated", log });
       }
