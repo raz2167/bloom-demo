@@ -3,7 +3,9 @@ import { NextRequest } from "next/server";
 
 export const maxDuration = 300;
 
-const BLUEPRINT_PREFIX = "This is a black and white architectural line drawing of a balcony. Preserve this line drawing exactly as the background. Do not replace or redraw the floor, walls or railing. All planters must be placed flush against the back wall, touching it, their long 60cm side running PARALLEL to the wall like window boxes - NOT sticking out into the balcony. The railing is visible above and behind the planters. Only add the following colored elements on top of the existing line drawing: ";
+// No longer prepend line-drawing instructions - plan/route.ts now builds the full prompt
+// This prefix is only a safety fallback for missing placement rules
+const PLACEMENT_SAFETY = "Place all planters flush against the back wall, long 60cm side parallel to wall like window boxes, railing visible above. ";
 
 async function getBlueprintBuffer(blueprintUrl: string): Promise<Buffer> {
   if (blueprintUrl.startsWith("data:")) {
@@ -47,8 +49,9 @@ export async function POST(req: NextRequest) {
       const bpBuf = await getBlueprintBuffer(blueprintUrl);
       L("[2] buffer: " + bpBuf.length + " bytes");
 
-      const alreadyHasPrefix = dallePrompt.startsWith("This is a black and white architectural line drawing");
-      const finalPrompt = alreadyHasPrefix ? dallePrompt : BLUEPRINT_PREFIX + dallePrompt;
+      // Add placement safety prefix only if not already in prompt
+      const hasPlacement = dallePrompt.includes("flush against the back wall") || dallePrompt.includes("parallel to wall");
+      const finalPrompt = hasPlacement ? dallePrompt : PLACEMENT_SAFETY + dallePrompt;
       L("[3] prompt: " + finalPrompt.length + " chars");
 
       L("[4] building FormData (stream=true, partial_images=2)");
@@ -112,9 +115,9 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // final image (non-streaming event format: data array)
-          if (Array.isArray(ev.data) && ev.data[0]?.b64_json) {
-            const b64 = ev.data[0].b64_json as string;
+          // final image via data array (non-streaming fallback format)
+          if (Array.isArray(ev.data) && (ev.data[0] as Record<string, unknown>)?.b64_json) {
+            const b64 = (ev.data[0] as Record<string, unknown>).b64_json as string;
             L("[final-data] " + Math.round(b64.length / 1024) + "KB");
             await send({ type: "done", imageUrl: "data:image/jpeg;base64," + b64, log });
             await writer.close();
@@ -122,7 +125,7 @@ export async function POST(req: NextRequest) {
           }
 
           // streaming completed event
-          if (ev.type === "image_generation.completed" || (ev.b64_json && !ev.partial_image_index)) {
+          if (ev.type === "image_generation.completed") {
             const b64 = ev.b64_json as string | undefined;
             if (b64) {
               L("[final-stream] " + Math.round(b64.length / 1024) + "KB");
@@ -134,7 +137,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // stream ended — use last partial as final if no explicit done received
+      // stream ended without explicit done event
       if (lastPartialB64) {
         L("[fallback] using last partial as final");
         await send({ type: "done", imageUrl: "data:image/jpeg;base64," + lastPartialB64, log });
